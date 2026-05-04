@@ -6,7 +6,6 @@ import type {
   WasteRecord,
   DayCondition,
 } from './types';
-import { MODEL_MENU } from './model-prediction';
 
 const KEYS = {
   menu: 'ventore_menu_list',
@@ -18,7 +17,7 @@ const KEYS = {
   schemaVersion: 'ventore_schema_version',
 };
 
-const CURRENT_SCHEMA_VERSION = '2';
+const CURRENT_SCHEMA_VERSION = '4';
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const CONDITIONS: DayCondition[] = ['Normal', 'Normal', 'Normal', 'Ramai', 'Normal', 'Hujan', 'Normal', 'Normal', 'Ramai', 'Normal', 'Normal', 'Normal', 'Normal', 'Normal'];
@@ -35,23 +34,147 @@ function dayName(daysAgo: number): string {
   return DAY_NAMES[d.getDay()];
 }
 
-const SEED_MENUS: MenuItem[] = MODEL_MENU.map((m) => ({
-  id: m.id,
-  name: m.name,
-  // Minimal placeholder recipe — user can edit ingredient mapping later
-  recipe: {},
-}));
+const SEED_MENUS: MenuItem[] = [
+  {
+    id: 'nasi_goreng',
+    name: 'Nasi Goreng',
+    recipe: {
+      beras: 200,
+      telur: 1,
+      minyak_goreng: 15,
+      bawang_putih: 5,
+      kecap_manis: 10,
+      garam: 2,
+    },
+  },
+  {
+    id: 'mie_goreng',
+    name: 'Mie Goreng Spesial',
+    recipe: {
+      mie_instan: 1,
+      telur: 1,
+      sawi: 30,
+      kol: 20,
+      bawang_putih: 5,
+      cabai: 3,
+    },
+  },
+  {
+    id: 'soto_ayam',
+    name: 'Soto Ayam',
+    recipe: {
+      ayam: 80,
+      bawang_putih: 5,
+      bawang_merah: 5,
+      kol: 20,
+      daun_bawang: 5,
+      air: 300,
+      garam: 2,
+    },
+  },
+  {
+    id: 'bakso_sapi',
+    name: 'Bakso Sapi',
+    recipe: {
+      daging_sapi: 70,
+      mie_bihun: 50,
+      bawang_putih: 5,
+      daun_bawang: 5,
+      air: 300,
+      garam: 2,
+    },
+  },
+  {
+    id: 'sate_ayam',
+    name: 'Sate Ayam',
+    recipe: {
+      ayam: 100,
+      tusuk_sate: 1,
+      bumbu_kacang: 30,
+      kecap_manis: 10,
+      garam: 2,
+    },
+  },
+  {
+    id: 'ayam_geprek',
+    name: 'Ayam Geprek',
+    recipe: {
+      ayam: 100,
+      tepung_terigu: 30,
+      cabai: 5,
+      garam: 2,
+      minyak_goreng: 15,
+    },
+  },
+  {
+    id: 'gorengan',
+    name: 'Gorengan',
+    recipe: {
+      tepung_terigu: 50,
+      minyak_goreng: 20,
+      garam: 1,
+      air: 30,
+    },
+  },
+  {
+    id: 'es_teh_manis',
+    name: 'Es Teh Manis',
+    recipe: {
+      teh_celup: 1,
+      gula: 15,
+      air: 250,
+      es_batu: 50,
+    },
+  },
+  {
+    id: 'es_jeruk',
+    name: 'Es Jeruk',
+    recipe: {
+      jeruk: 1,
+      gula: 10,
+      air: 250,
+      es_batu: 50,
+    },
+  },
+  {
+    id: 'kopi_susu',
+    name: 'Kopi Susu',
+    recipe: {
+      kopi_bubuk: 10,
+      susu: 50,
+      gula: 10,
+      air: 200,
+      es_batu: 50,
+    },
+  },
+];
 
 const SEED_PRICES: IngredientPrices = {
   beras: 12,
   telur: 1500,
   minyak_goreng: 20,
-  mie_basah: 10,
+  bawang_putih: 35,
+  kecap_manis: 8,
+  garam: 5,
+  mie_instan: 3500,
+  sawi: 8,
+  kol: 6,
+  cabai: 25,
   ayam: 35,
-  kaldu: 5,
-  teh: 50,
-  gula: 12,
+  bawang_merah: 30,
+  daun_bawang: 15,
   air: 0,
+  daging_sapi: 80,
+  mie_bihun: 12,
+  tusuk_sate: 100,
+  bumbu_kacang: 20,
+  tepung_terigu: 14,
+  teh_celup: 250,
+  gula: 12,
+  es_batu: 1,
+  jeruk: 2000,
+  kopi_bubuk: 90,
+  susu: 18,
 };
 
 function generateSeedSales(): SalesRecord[] {
@@ -121,7 +244,21 @@ function isModelMenuList(value: MenuItem[] | null | undefined): boolean {
     return false;
   }
 
-  return SEED_MENUS.every((menu, index) => value[index]?.id === menu.id);
+  return SEED_MENUS.every((menu, index) => {
+    const current = value[index];
+    if (!current || current.id !== menu.id) {
+      return false;
+    }
+
+    const expectedRecipeEntries = Object.entries(menu.recipe);
+    const currentRecipeEntries = Object.entries(current.recipe || {});
+
+    if (expectedRecipeEntries.length !== currentRecipeEntries.length) {
+      return false;
+    }
+
+    return expectedRecipeEntries.every(([ingredient, quantity]) => current.recipe?.[ingredient] === quantity);
+  });
 }
 
 function migrateMenuListIfNeeded(): MenuItem[] {

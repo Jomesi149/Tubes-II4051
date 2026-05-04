@@ -74,7 +74,7 @@ function NavLinks({
   return (
     <ul className="space-y-0.5 px-3">
       {NAV_ITEMS.map((item) => {
-        const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+        const active = pathname === item.href;
         return (
           <li key={item.href}>
             <Link
