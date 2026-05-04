@@ -2,22 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  initializeIfNeeded,
-  getMenuList,
-  getSalesHistory,
-  getStockData,
-  getWasteLog,
-  formatRp,
-} from '@/lib/storage';
-import { calculateRecommendations, getTotalRecommendation } from '@/lib/recommendation';
-import type { DayCondition } from '@/lib/types';
+import { initializeIfNeeded, getWasteLog, formatRp, todayString } from '@/lib/storage';
+import type { ModelPredictionResponse, WeatherOption } from '@/lib/model-prediction';
+import { MODEL_MENU } from '@/lib/model-prediction';
 
 interface DashboardData {
-  totalRecommendation: number;
-  criticalIngredients: string[];
+  predictionDate: string;
+  weather: string;
+  eventLabel: string;
+  totalQty: number;
+  totalRevenue: number;
+  topMenu: string;
   totalWasteLoss: number;
-  condition: DayCondition;
+  predictions: Array<{ menu_id: string; menu_name: string; predicted_qty: number; predicted_revenue: number }>;
 }
 
 export default function Dashboard() {
@@ -25,31 +22,92 @@ export default function Dashboard() {
 
   useEffect(() => {
     initializeIfNeeded();
-    const menus = getMenuList();
-    const history = getSalesHistory();
-    const stock = getStockData();
     const wasteLog = getWasteLog();
+    const totalWasteLoss = wasteLog.reduce((sum, r) => sum + r.total_daily_loss, 0);
 
-    const condition: DayCondition = 'Normal';
-    const recommendations = calculateRecommendations(history, menus, condition, 7);
-    const totalRecommendation = getTotalRecommendation(recommendations);
+    async function loadPrediction() {
+      try {
+        // Get today's date
+        const today = todayString();
+        const dateObj = new Date(today);
 
-    const criticalIngredients: string[] = [];
-    for (const rec of recommendations) {
-      const menu = menus.find((m) => m.id === rec.menuId);
-      if (!menu) continue;
-      for (const [ingredient, perPortion] of Object.entries(menu.recipe)) {
-        const required = rec.final * perPortion;
-        const available = stock[ingredient] ?? 0;
-        if (available < required && !criticalIngredients.includes(ingredient)) {
-          criticalIngredients.push(ingredient);
+        // Auto-detect weather for today
+        let weather: WeatherOption = 'Berawan';
+        let event: string = 'missing';
+
+        try {
+          const weatherResponse = await fetch(
+            'https://api.openweathermap.org/data/2.5/forecast?lat=-6.9175&lon=107.6191&appid=717b64c259b63d6656a8032709d0a797&units=metric'
+          );
+          const weatherData = await weatherResponse.json();
+
+          if (weatherData.list && weatherData.list.length > 0) {
+            const todayForecasts = weatherData.list.filter((f: { dt_txt: string }) =>
+              f.dt_txt.startsWith(today)
+            );
+
+            if (todayForecasts.length > 0) {
+              const forecast = todayForecasts[0];
+              const weatherMain = forecast.weather?.[0]?.main;
+              const weatherId = forecast.weather?.[0]?.id;
+
+              if (weatherMain === 'Clear' || weatherId === 800) {
+                weather = 'Cerah';
+              } else if (weatherMain === 'Clouds' || (weatherId >= 801 && weatherId <= 804)) {
+                weather = 'Berawan';
+              } else if (
+                weatherMain === 'Rain' ||
+                weatherMain === 'Drizzle' ||
+                weatherMain === 'Thunderstorm'
+              ) {
+                weather = 'Hujan';
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Weather fetch failed:', err);
         }
+
+        // Auto-detect event for today
+        if (dateObj.getDate() === 1) {
+          event = 'Promo Awal Bulan';
+        } else if (dateObj.getDay() === 5) {
+          event = 'Promo Jumat Berkah';
+        }
+
+        // Fetch prediction
+        const response = await fetch('/api/model-prediction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weather, event }),
+        });
+
+        const prediction = (await response.json()) as ModelPredictionResponse;
+        setData({
+          predictionDate: prediction.prediction_date,
+          weather: prediction.weather,
+          eventLabel: prediction.event_label,
+          totalQty: prediction.total_qty,
+          totalRevenue: prediction.total_revenue,
+          topMenu: prediction.top_menu,
+          totalWasteLoss,
+          predictions: prediction.predictions,
+        });
+      } catch {
+        setData({
+          predictionDate: '-',
+          weather: 'Berawan',
+          eventLabel: 'Tidak Ada',
+          totalQty: 0,
+          totalRevenue: 0,
+          topMenu: '-',
+          totalWasteLoss: 0,
+          predictions: [],
+        });
       }
     }
 
-    const totalWasteLoss = wasteLog.reduce((sum, r) => sum + r.total_daily_loss, 0);
-
-    setData({ totalRecommendation, criticalIngredients, totalWasteLoss, condition });
+    void loadPrediction();
   }, []);
 
   if (!data) {
@@ -59,8 +117,6 @@ export default function Dashboard() {
       </div>
     );
   }
-
-  const hasCritical = data.criticalIngredients.length > 0;
 
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
@@ -72,72 +128,32 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Widget 1: Total Rekomendasi */}
         <Link
           href="/recommendation"
           className="group block bg-surface-1 border border-hairline rounded-lg p-6 hover:bg-surface-2 transition-colors"
         >
           <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-3">
-            Total Rekomendasi Produksi
+            Total Prediksi Porsi
           </p>
           <p className="text-[40px] font-semibold text-ink tracking-[-1px] leading-none mb-1">
-            {data.totalRecommendation}
+            {data.totalQty}
           </p>
-          <p className="text-[14px] text-ink-muted">porsi · kondisi {data.condition}</p>
+          <p className="text-[14px] text-ink-muted">{data.weather} · {data.eventLabel}</p>
           <p className="text-[13px] text-primary mt-4 group-hover:text-primary-hover transition-colors">
-            Lihat detail →
+            Lihat prediksi →
           </p>
         </Link>
 
-        {/* Widget 2: Indikator Stok */}
-        <Link
-          href="/stock"
-          className="group block bg-surface-1 border border-hairline rounded-lg p-6 hover:bg-surface-2 transition-colors"
-        >
+        <div className="group block bg-surface-1 border border-hairline rounded-lg p-6">
           <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-3">
-            Indikator Stok
+            Komoditas Teratas
           </p>
-          {hasCritical ? (
-            <>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium bg-[#e5484d]/15 text-[#e5484d] border border-[#e5484d]/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#e5484d] inline-block" />
-                  Kritis
-                </span>
-              </div>
-              <p className="text-[14px] text-ink-muted">
-                {data.criticalIngredients.length} bahan kekurangan stok
-              </p>
-              <ul className="mt-2 space-y-1">
-                {data.criticalIngredients.slice(0, 3).map((ing) => (
-                  <li key={ing} className="text-[13px] text-[#e5484d]">
-                    · {ing.replace(/_/g, ' ')}
-                  </li>
-                ))}
-                {data.criticalIngredients.length > 3 && (
-                  <li className="text-[13px] text-ink-tertiary">
-                    +{data.criticalIngredients.length - 3} lainnya
-                  </li>
-                )}
-              </ul>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium bg-success/15 text-success border border-success/20">
-                  <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
-                  Aman
-                </span>
-              </div>
-              <p className="text-[14px] text-ink-muted">Semua stok tercukupi</p>
-            </>
-          )}
-          <p className="text-[13px] text-primary mt-4 group-hover:text-primary-hover transition-colors">
-            Kelola stok →
+          <p className="text-[28px] font-semibold text-ink tracking-[-0.8px] leading-none mb-1">
+            {data.topMenu}
           </p>
-        </Link>
+          <p className="text-[14px] text-ink-muted">Prediksi paling tinggi untuk sesi berikutnya</p>
+        </div>
 
-        {/* Widget 3: Total Waste */}
         <Link
           href="/waste"
           className="group block bg-surface-1 border border-hairline rounded-lg p-6 hover:bg-surface-2 transition-colors"
@@ -155,6 +171,56 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      <div className="mt-6 bg-surface-1 border border-hairline rounded-lg p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Tanggal Prediksi</p>
+          <p className="text-[18px] font-medium text-ink">{data.predictionDate}</p>
+        </div>
+        <div>
+          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Revenue Model</p>
+          <p className="text-[18px] font-medium text-ink">{formatRp(data.totalRevenue)}</p>
+        </div>
+        <div>
+          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Waste Akumulasi</p>
+          <p className="text-[18px] font-medium text-ink">{formatRp(data.totalWasteLoss)}</p>
+        </div>
+      </div>
+
+      {/* Predicted quantities for all products */}
+      <div className="mt-8">
+        <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-4">
+          Prediksi Jumlah Produk Hari Ini
+        </p>
+        <div className="overflow-x-auto border border-hairline rounded-lg">
+          <table className="min-w-full text-left bg-surface-1">
+            <thead className="bg-surface-2">
+              <tr>
+                <th className="px-4 py-3 text-[12px] uppercase tracking-[0.4px] text-ink-subtle">Komoditas</th>
+                <th className="px-4 py-3 text-[12px] uppercase tracking-[0.4px] text-ink-subtle">Qty Prediksi</th>
+                <th className="px-4 py-3 text-[12px] uppercase tracking-[0.4px] text-ink-subtle">Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.predictions && data.predictions.length > 0 ? (
+                data.predictions.map((pred, idx) => (
+                  <tr key={pred.menu_id} className={`${idx < data.predictions.length - 1 ? 'border-b border-hairline' : ''}`}>
+                    <td className="px-4 py-3 text-[14px] text-ink font-medium">{pred.menu_name}</td>
+                    <td className="px-4 py-3 text-[14px] text-ink">{pred.predicted_qty}</td>
+                    <td className="px-4 py-3 text-[14px] text-ink-muted">{formatRp(pred.predicted_revenue)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="px-4 py-6 text-[14px] text-ink-subtle text-center">
+                    Belum ada prediksi. Coba buka halaman Prediksi Model.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Quick actions */}
       <div className="mt-8">
         <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-4">
@@ -162,8 +228,14 @@ export default function Dashboard() {
         </p>
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/sales"
+            href="/recommendation"
             className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors"
+          >
+            Buka Prediksi Model
+          </Link>
+          <Link
+            href="/sales"
+            className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-surface-1 border border-hairline text-ink hover:bg-surface-2 transition-colors"
           >
             Input Penjualan Hari Ini
           </Link>
@@ -172,12 +244,6 @@ export default function Dashboard() {
             className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-surface-1 border border-hairline text-ink hover:bg-surface-2 transition-colors"
           >
             Catat Waste
-          </Link>
-          <Link
-            href="/stock"
-            className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-surface-1 border border-hairline text-ink hover:bg-surface-2 transition-colors"
-          >
-            Update Stok
           </Link>
         </div>
       </div>

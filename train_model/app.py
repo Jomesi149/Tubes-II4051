@@ -24,17 +24,17 @@ def get_weather_tomorrow():
     except Exception as e:
         return "Berawan"
 
-    st.set_page_config(page_title="Warung Forecaster", layout="wide")
+st.set_page_config(page_title="Warung Forecaster", layout="wide")
 
-    st.title("Sistem Prediksi Stok & Inventaris Warung")
+st.title("Sistem Prediksi Stok & Inventaris Warung")
 st.markdown("Sistem ini memprediksi porsi penjualan esok hari dengan menarik data cuaca secara otomatis dari Open-Meteo API.")
 
-    st.sidebar.header("Parameter Esok Hari")
+st.sidebar.header("Parameter Esok Hari")
 besok = datetime.now() + timedelta(days=1)
 st.sidebar.write(f"**Tanggal Prediksi:** {besok.strftime('%d %B %Y')}")
 
 cuaca_otomatis = get_weather_tomorrow()
-    st.sidebar.info(f"Prakiraan Cuaca (Otomatis): {cuaca_otomatis}")
+st.sidebar.info(f"Prakiraan Cuaca (Otomatis): {cuaca_otomatis}")
 
 event_input = st.sidebar.selectbox(
     "Apakah ada event/momen khusus?",

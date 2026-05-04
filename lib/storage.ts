@@ -6,6 +6,7 @@ import type {
   WasteRecord,
   DayCondition,
 } from './types';
+import { MODEL_MENU } from './model-prediction';
 
 const KEYS = {
   menu: 'ventore_menu_list',
@@ -14,7 +15,10 @@ const KEYS = {
   prices: 'ventore_ingredient_prices',
   waste: 'ventore_waste_log',
   initialized: 'ventore_initialized',
+  schemaVersion: 'ventore_schema_version',
 };
+
+const CURRENT_SCHEMA_VERSION = '2';
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const CONDITIONS: DayCondition[] = ['Normal', 'Normal', 'Normal', 'Ramai', 'Normal', 'Hujan', 'Normal', 'Normal', 'Ramai', 'Normal', 'Normal', 'Normal', 'Normal', 'Normal'];
@@ -31,23 +35,12 @@ function dayName(daysAgo: number): string {
   return DAY_NAMES[d.getDay()];
 }
 
-const SEED_MENUS: MenuItem[] = [
-  {
-    id: 'nasi_goreng',
-    name: 'Nasi Goreng',
-    recipe: { beras: 200, telur: 1, minyak_goreng: 15 },
-  },
-  {
-    id: 'mie_ayam',
-    name: 'Mie Ayam',
-    recipe: { mie_basah: 150, ayam: 80, kaldu: 200 },
-  },
-  {
-    id: 'es_teh',
-    name: 'Es Teh',
-    recipe: { teh: 5, gula: 20, air: 300 },
-  },
-];
+const SEED_MENUS: MenuItem[] = MODEL_MENU.map((m) => ({
+  id: m.id,
+  name: m.name,
+  // Minimal placeholder recipe — user can edit ingredient mapping later
+  recipe: {},
+}));
 
 const SEED_PRICES: IngredientPrices = {
   beras: 12,
@@ -62,20 +55,20 @@ const SEED_PRICES: IngredientPrices = {
 };
 
 function generateSeedSales(): SalesRecord[] {
-  const base = [
-    { id: 'nasi_goreng', mean: 42, std: 6 },
-    { id: 'mie_ayam', mean: 26, std: 4 },
-    { id: 'es_teh', mean: 65, std: 8 },
-  ];
   const records: SalesRecord[] = [];
   for (let i = 14; i >= 1; i--) {
-    const condition = CONDITIONS[i - 1];
-    const multiplier = condition === 'Ramai' ? 1.25 : condition === 'Hujan' ? 0.80 : 1.0;
+    const condition = CONDITIONS[i - 1] ?? 'Normal';
+    const multiplier = condition === 'Ramai' ? 1.25 : condition === 'Hujan' ? 0.8 : 1.0;
     const sales: Record<string, number> = {};
-    for (const menu of base) {
-      const raw = menu.mean * multiplier + (Math.random() - 0.5) * menu.std * 2;
+
+    SEED_MENUS.forEach((menu, idx) => {
+      // base mean varies slightly by index to create realistic variety
+      const mean = 25 + idx * 3;
+      const std = Math.max(3, Math.round(mean * 0.15));
+      const raw = mean * multiplier + (Math.random() - 0.5) * std * 2;
       sales[menu.id] = Math.max(0, Math.round(raw));
-    }
+    });
+
     records.push({
       date: dateString(i),
       day_of_week: dayName(i),
@@ -123,18 +116,46 @@ function write<T>(key: string, value: T): void {
   }
 }
 
+function isModelMenuList(value: MenuItem[] | null | undefined): boolean {
+  if (!value || value.length !== SEED_MENUS.length) {
+    return false;
+  }
+
+  return SEED_MENUS.every((menu, index) => value[index]?.id === menu.id);
+}
+
+function migrateMenuListIfNeeded(): MenuItem[] {
+  const current = read<MenuItem[]>(KEYS.menu, []);
+
+  if (!isModelMenuList(current)) {
+    write(KEYS.menu, SEED_MENUS);
+    localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
+    return SEED_MENUS;
+  }
+
+  localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
+  return current;
+}
+
 export function initializeIfNeeded(): void {
-  if (localStorage.getItem(KEYS.initialized)) return;
-  write(KEYS.menu, SEED_MENUS);
-  write(KEYS.sales, generateSeedSales());
-  write(KEYS.prices, SEED_PRICES);
-  write(KEYS.waste, generateSeedWaste());
-  write(KEYS.stock, {});
-  localStorage.setItem(KEYS.initialized, '1');
+  const currentVersion = localStorage.getItem(KEYS.schemaVersion);
+
+  if (currentVersion !== CURRENT_SCHEMA_VERSION) {
+    migrateMenuListIfNeeded();
+    localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
+  }
+
+  if (!localStorage.getItem(KEYS.initialized)) {
+    write(KEYS.sales, generateSeedSales());
+    write(KEYS.prices, SEED_PRICES);
+    write(KEYS.waste, generateSeedWaste());
+    write(KEYS.stock, {});
+    localStorage.setItem(KEYS.initialized, '1');
+  }
 }
 
 export function getMenuList(): MenuItem[] {
-  return read<MenuItem[]>(KEYS.menu, SEED_MENUS);
+  return migrateMenuListIfNeeded();
 }
 
 export function saveMenuList(menus: MenuItem[]): void {

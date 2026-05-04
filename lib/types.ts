@@ -10,7 +10,7 @@ export interface MenuItem {
 export interface SalesRecord {
   date: string;           // ISO date string YYYY-MM-DD
   day_of_week: string;    // Senin, Selasa, ...
-  condition: DayCondition;
+  condition: string;
   sales: Record<string, number>; // menu id → quantity sold
 }
 

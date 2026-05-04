@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from 'react';
 import {
@@ -9,17 +10,57 @@ import {
   todayString,
   DAY_NAMES_EXPORTED,
 } from '@/lib/storage';
-import type { DayCondition, MenuItem, SalesRecord } from '@/lib/types';
-
-const CONDITIONS: DayCondition[] = ['Normal', 'Ramai', 'Hujan'];
+import { WEATHER_OPTIONS, type WeatherOption } from '@/lib/model-prediction';
+import type { MenuItem, SalesRecord } from '@/lib/types';
 
 export default function SalesPage() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [history, setHistory] = useState<SalesRecord[]>([]);
-  const [date, setDate] = useState(todayString());
-  const [condition, setCondition] = useState<DayCondition>('Normal');
+  const date = todayString();
+  const [weather, setWeather] = useState<WeatherOption>('Berawan');
   const [sales, setSales] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherError, setWeatherError] = useState('');
+
+  async function fetchWeatherForDate(dateStr: string) {
+    try {
+      setWeatherLoading(true);
+      setWeatherError('');
+
+      const response = await fetch(
+        'https://api.openweathermap.org/data/2.5/forecast?lat=-6.9175&lon=107.6191&appid=717b64c259b63d6656a8032709d0a797&units=metric'
+      );
+      const data = await response.json();
+      const forecasts = (data.list ?? []).filter((forecast: { dt_txt: string }) =>
+        forecast.dt_txt.startsWith(dateStr)
+      );
+
+      if (forecasts.length === 0) {
+        setWeather('Berawan');
+        setWeatherError('Data cuaca untuk tanggal tersebut belum tersedia.');
+        return;
+      }
+
+      const forecast = forecasts[0];
+      const weatherMain = forecast.weather?.[0]?.main;
+      const weatherId = forecast.weather?.[0]?.id;
+
+      if (weatherMain === 'Clear' || weatherId === 800) {
+        setWeather('Cerah');
+      } else if (weatherMain === 'Clouds' || (weatherId >= 801 && weatherId <= 804)) {
+        setWeather('Berawan');
+      } else {
+        setWeather('Hujan');
+      }
+    } catch (error) {
+      console.error('Error fetching weather for sales form:', error);
+      setWeather('Berawan');
+      setWeatherError('Gagal mengambil cuaca otomatis.');
+    } finally {
+      setWeatherLoading(false);
+    }
+  }
 
   useEffect(() => {
     initializeIfNeeded();
@@ -27,12 +68,16 @@ export default function SalesPage() {
     setMenus(m);
     setHistory(getSalesHistory());
     const initial: Record<string, string> = {};
-    m.forEach((menu) => { initial[menu.id] = ''; });
+    m.forEach((menu) => {
+      initial[menu.id] = '';
+    });
     setSales(initial);
+    void fetchWeatherForDate(date);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
     const d = new Date(date);
     const dayOfWeek = DAY_NAMES_EXPORTED[d.getDay()];
     const parsedSales: Record<string, number> = {};
@@ -43,7 +88,7 @@ export default function SalesPage() {
     const record: SalesRecord = {
       date,
       day_of_week: dayOfWeek,
-      condition,
+      condition: 'Cerah',
       sales: parsedSales,
     };
 
@@ -79,33 +124,40 @@ export default function SalesPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Date */}
             <div>
-              <label className="block text-[14px] text-ink-muted mb-1.5">Tanggal</label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink focus:outline-none focus:border-hairline-strong"
-              />
+              <label className="block text-[14px] text-ink-muted mb-1.5">Tanggal Hari Ini</label>
+              <div className="w-full bg-canvas border border-hairline rounded-md px-3 py-2 text-[16px] text-ink">
+                {date}
+              </div>
             </div>
 
-            {/* Condition */}
+            {/* Weather */}
             <div>
-              <label className="block text-[14px] text-ink-muted mb-2">Kondisi Hari</label>
-              <div className="flex gap-2 bg-canvas rounded-full p-1 w-fit">
-                {CONDITIONS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCondition(c)}
-                    className={`px-[14px] py-1.5 rounded-full text-[14px] font-medium transition-colors ${
-                      condition === c
-                        ? 'bg-surface-2 text-ink'
-                        : 'text-ink-subtle hover:text-ink'
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
+              <label className="block text-[14px] text-ink-muted mb-2">Cuaca Riil</label>
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {WEATHER_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setWeather(option)}
+                      className={`px-[14px] py-1.5 rounded-full text-[14px] font-medium transition-colors ${
+                        weather === option ? 'bg-surface-2 text-ink' : 'text-ink-subtle hover:text-ink'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                <div className="rounded-md border border-hairline bg-canvas px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[16px] font-medium text-ink">
+                        {weatherLoading ? 'Memuat cuaca...' : weather}
+                      </p>
+                      {weatherError && <p className="text-[12px] text-ink-subtle mt-1">{weatherError}</p>}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -140,7 +192,8 @@ export default function SalesPage() {
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full px-[14px] py-2 rounded-md text-[14px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors"
+                disabled={weatherLoading}
+                className="w-full px-[14px] py-2 rounded-md text-[14px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors disabled:opacity-60"
               >
                 {saved ? '✓ Tersimpan' : 'Simpan Penjualan'}
               </button>
@@ -168,7 +221,7 @@ export default function SalesPage() {
                       <span className="text-[12px] text-ink-subtle">{record.day_of_week}</span>
                     </div>
                     <span className="text-[12px] px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted border border-hairline">
-                      {record.condition}
+                      {record.condition === 'Normal' ? 'Cerah' : record.condition}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-3">

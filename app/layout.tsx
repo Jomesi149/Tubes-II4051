@@ -17,8 +17,8 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Ventoré — F&B Operations',
-  description: 'Smart inventory & waste reduction for F&B businesses',
+  title: 'Ventoré — XGB Demand Forecast',
+  description: 'Prediksi komoditas F&B berbasis pipeline model XGB',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

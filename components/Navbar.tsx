@@ -6,7 +6,7 @@ import { useState } from 'react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: '◈' },
-  { href: '/recommendation', label: 'Rekomendasi', icon: '◉' },
+  { href: '/recommendation', label: 'Prediksi Model', icon: '◉' },
   { href: '/sales', label: 'Input Penjualan', icon: '◎' },
   { href: '/stock', label: 'Stok & Alert', icon: '◬' },
   { href: '/waste', label: 'Log Waste', icon: '◌' },

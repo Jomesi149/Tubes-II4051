@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
 import { useEffect, useState } from 'react';
 import {
@@ -42,39 +43,7 @@ export default function StockPage() {
     air: 'ml',
   };
 
-  useEffect(() => {
-    initializeIfNeeded();
-    const m = getMenuList();
-    setMenus(m);
-    const history = getSalesHistory();
-    const recs = calculateRecommendations(history, m, condition, 7);
-    setRecommendations(recs);
-
-    const saved = getStockData();
-    const allIngredients = new Set<string>();
-    m.forEach((menu) => Object.keys(menu.recipe).forEach((ing) => allIngredients.add(ing)));
-    const initial: Record<string, string> = {};
-    allIngredients.forEach((ing) => {
-      initial[ing] = saved[ing] !== undefined ? String(saved[ing]) : '';
-    });
-    setStock(initial);
-  }, []);
-
-  useEffect(() => {
-    if (menus.length === 0 || recommendations.length === 0) return;
-    recalcStatuses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recommendations, stock, menus]);
-
-  useEffect(() => {
-    if (menus.length === 0) return;
-    const history = getSalesHistory();
-    const recs = calculateRecommendations(history, menus, condition, 7);
-    setRecommendations(recs);
-  }, [condition, menus]);
-
   function recalcStatuses() {
-    // aggregate required per ingredient across all menus
     const required: Record<string, number> = {};
     for (const rec of recommendations) {
       const menu = menus.find((m) => m.id === rec.menuId);
@@ -103,6 +72,36 @@ export default function StockPage() {
 
     setStatuses(result);
   }
+
+  useEffect(() => {
+    initializeIfNeeded();
+    const m = getMenuList();
+    setMenus(m);
+    const history = getSalesHistory();
+    const recs = calculateRecommendations(history, m, condition, 7);
+    setRecommendations(recs);
+
+    const saved = getStockData();
+    const allIngredients = new Set<string>();
+    m.forEach((menu) => Object.keys(menu.recipe).forEach((ing) => allIngredients.add(ing)));
+    const initial: Record<string, string> = {};
+    allIngredients.forEach((ing) => {
+      initial[ing] = saved[ing] !== undefined ? String(saved[ing]) : '';
+    });
+    setStock(initial);
+  }, []);
+
+  useEffect(() => {
+    if (menus.length === 0 || recommendations.length === 0) return;
+    recalcStatuses();
+  }, [recommendations, stock, menus]);
+
+  useEffect(() => {
+    if (menus.length === 0) return;
+    const history = getSalesHistory();
+    const recs = calculateRecommendations(history, menus, condition, 7);
+    setRecommendations(recs);
+  }, [condition, menus]);
 
   const handleSave = () => {
     const stockData: Record<string, number> = {};
