@@ -1,5 +1,5 @@
 export type DayCondition = 'Normal' | 'Ramai' | 'Hujan';
-export type WasteReason = 'Rusak' | 'Kedaluwarsa' | 'Sisa Produksi';
+export type WasteReason = 'Rusak' | 'Kedaluwarsa' | 'Sisa Produksi' | 'Terbuang';
 
 export interface MenuItem {
   id: string;

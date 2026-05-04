@@ -7,12 +7,52 @@ import {
   getWasteLog,
   appendWasteRecord,
   getIngredientPrices,
+  getMenuList,
   formatRp,
   todayString,
 } from '@/lib/storage';
-import type { WasteReason, WasteRecord, WasteItem } from '@/lib/types';
+import type { WasteReason, WasteRecord, WasteItem, MenuItem } from '@/lib/types';
 
-const REASONS: WasteReason[] = ['Rusak', 'Kedaluwarsa', 'Sisa Produksi'];
+const REASONS: WasteReason[] = ['Kedaluwarsa', 'Rusak', 'Sisa Produksi', 'Terbuang'];
+
+const REASON_LABELS: Record<WasteReason, string> = {
+  Kedaluwarsa: 'Kedaluwarsa',
+  Rusak: 'Rusak',
+  'Sisa Produksi': 'Sisa Produksi',
+  Terbuang: 'Terbuang',
+};
+
+const REASON_HELPERS: Record<WasteReason, string> = {
+  Kedaluwarsa: 'Lewat tanggal simpan',
+  Rusak: 'Tidak layak pakai',
+  'Sisa Produksi': 'Berlebih setelah produksi',
+  Terbuang: 'Sisa yang harus dibuang',
+};
+
+const INGREDIENT_UNITS: Record<string, string> = {
+  beras: 'gram',
+  garam: 'gram',
+  telur: 'butir',
+  mie_instan: 'bungkus',
+  mie_bihun: 'gram',
+  sawi: 'gram',
+  kol: 'gram',
+  cabai: 'gram',
+  ayam: 'gram',
+  bawang_putih: 'gram',
+  bawang_merah: 'gram',
+  daun_bawang: 'gram',
+  gula: 'gram',
+  kecap_manis: 'ml',
+  daging_sapi: 'gram',
+  bumbu_kacang: 'gram',
+  tepung_terigu: 'gram',
+  teh_celup: 'sachet',
+  jeruk: 'buah',
+  kopi_bubuk: 'gram',
+  susu: 'ml',
+  mie_basah: 'gram',
+};
 
 interface ChartPoint {
   date: string;
@@ -119,23 +159,71 @@ export default function WastePage() {
   const [unit, setUnit] = useState('gram');
   const [reason, setReason] = useState<WasteReason>('Sisa Produksi');
   const [saved, setSaved] = useState(false);
+  const [ingredientsList, setIngredientsList] = useState<string[]>([]);
 
   useEffect(() => {
     initializeIfNeeded();
     setLog(getWasteLog());
     setPrices(getIngredientPrices());
+    // derive ingredient list from current menus (exclude minyak, air, es_batu, tusuk_sate)
+    const menus = getMenuList();
+    const all = new Set<string>();
+    menus.forEach((m: MenuItem) => Object.keys(m.recipe).forEach((ing) => all.add(ing)));
+    const excluded = new Set(['minyak_goreng', 'minyak', 'air', 'es_batu', 'tusuk_sate', 'minyak_ goreng']);
+    const filtered = Array.from(all).filter((i) => !Array.from(excluded).some((ex) => i.includes(ex)));
+    filtered.sort();
+    setIngredientsList(filtered);
+    // auto-select first ingredient if available
+    if (filtered.length > 0) {
+      const first = filtered[0];
+      setIngredient(first);
+      // set unit for first
+      const units: Record<string, string> = {
+        beras: 'gram',
+        garam: 'gram',
+        telur: 'butir',
+        mie_instan: 'bungkus',
+        mie_bihun: 'gram',
+        sawi: 'gram',
+        kol: 'gram',
+        cabai: 'gram',
+        ayam: 'gram',
+        bawang_putih: 'gram',
+        bawang_merah: 'gram',
+        daun_bawang: 'gram',
+        gula: 'gram',
+        kecap_manis: 'ml',
+        daging_sapi: 'gram',
+        tusuk_sate: 'buah',
+        bumbu_kacang: 'gram',
+        tepung_terigu: 'gram',
+        teh_celup: 'sachet',
+        es_batu: 'gram',
+        air: 'ml',
+        jeruk: 'buah',
+        kopi_bubuk: 'gram',
+        susu: 'ml',
+        mie_basah: 'gram',
+      };
+      setUnit(units[first] ?? 'unit');
+      const p = getIngredientPrices();
+      const keyPrice = p[first];
+      if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [first]: 0 }));
+      else setPrices((prev) => ({ ...prev, [first]: keyPrice }));
+    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ingredient.trim() || !quantity) return;
+    if (!ingredient || !quantity) return;
+    if (date > todayString()) return;
 
     const qty = parseFloat(quantity);
-    const unitPrice = prices[ingredient.trim().replace(/ /g, '_')] ?? 0;
+    const unitPrice = prices[ingredient] ?? 0;
     const totalLoss = qty * unitPrice;
 
     const item: WasteItem = {
-      ingredient: ingredient.trim(),
+      ingredient,
       quantity: qty,
       unit,
       reason,
@@ -149,7 +237,6 @@ export default function WastePage() {
     const newLog = getWasteLog();
     setLog(newLog);
     setSaved(true);
-    setIngredient('');
     setQuantity('');
     setTimeout(() => setSaved(false), 2500);
   };
@@ -200,6 +287,7 @@ export default function WastePage() {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                max={todayString()}
                 className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink focus:outline-none focus:border-hairline-strong"
               />
             </div>
@@ -207,14 +295,27 @@ export default function WastePage() {
             {/* Ingredient */}
             <div>
               <label className="block text-[14px] text-ink-muted mb-1.5">Nama Bahan</label>
-              <input
-                type="text"
+              <select
                 value={ingredient}
-                onChange={(e) => setIngredient(e.target.value)}
-                placeholder="cth: beras, ayam, telur"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setIngredient(val);
+                  // auto-set unit when ingredient selected
+                  setUnit(INGREDIENT_UNITS[val] ?? 'unit');
+                  const p = getIngredientPrices();
+                  const keyPrice = p[val];
+                  if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [val]: 0 }));
+                  else setPrices((prev) => ({ ...prev, [val]: keyPrice }));
+                }}
                 required
-                className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-hairline-strong"
-              />
+                className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink focus:outline-none focus:border-hairline-strong"
+              >
+                {ingredientsList.map((ing) => (
+                  <option key={ing} value={ing}>
+                    {ing.replace(/_/g, ' ')}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Quantity + unit */}
@@ -234,51 +335,42 @@ export default function WastePage() {
               </div>
               <div className="w-24">
                 <label className="block text-[14px] text-ink-muted mb-1.5">Satuan</label>
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-full bg-surface-1 border border-hairline rounded-md px-2 py-2 text-[16px] text-ink focus:outline-none focus:border-hairline-strong"
-                >
-                  <option value="gram">gram</option>
-                  <option value="kg">kg</option>
-                  <option value="ml">ml</option>
-                  <option value="liter">liter</option>
-                  <option value="butir">butir</option>
-                  <option value="unit">unit</option>
-                </select>
+                <div className="w-full bg-surface-1 border border-hairline rounded-md px-2 py-2 text-[16px] text-ink flex items-center justify-center">
+                  {unit}
+                </div>
               </div>
             </div>
 
             {/* Reason */}
             <div>
               <label className="block text-[14px] text-ink-muted mb-2">Alasan</label>
-              <div className="flex flex-wrap gap-2 bg-canvas rounded-full p-1 w-fit border border-hairline">
+              <div className="grid grid-cols-2 gap-2 bg-canvas rounded-xl p-2 border border-hairline">
                 {REASONS.map((r) => (
                   <button
                     key={r}
                     type="button"
                     onClick={() => setReason(r)}
-                    className={`px-[10px] py-1 rounded-full text-[13px] font-medium transition-colors ${
+                    className={`text-left rounded-lg px-3 py-2 transition-colors border ${
                       reason === r
-                        ? 'bg-surface-2 text-ink'
-                        : 'text-ink-subtle hover:text-ink'
+                        ? 'bg-surface-2 text-ink border-hairline-strong'
+                        : 'text-ink-subtle border-transparent hover:text-ink hover:bg-surface-2/60'
                     }`}
                   >
-                    {r}
+                    <span className="block text-[13px] font-medium">{REASON_LABELS[r]}</span>
+                    <span className="block text-[11px] text-ink-tertiary mt-0.5">
+                      {REASON_HELPERS[r]}
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Cost preview */}
-            {ingredient && quantity && prices[ingredient.trim().replace(/ /g, '_')] !== undefined && (
+            {ingredient && quantity && prices[ingredient] !== undefined && (
               <div className="bg-surface-2 rounded-md px-4 py-3">
                 <p className="text-[13px] text-ink-subtle">Estimasi kerugian:</p>
                 <p className="text-[22px] font-medium text-ink tracking-[-0.4px]">
-                  {formatRp(
-                    parseFloat(quantity) *
-                      (prices[ingredient.trim().replace(/ /g, '_')] ?? 0)
-                  )}
+                  {formatRp(parseFloat(quantity) * (prices[ingredient] ?? 0))}
                 </p>
               </div>
             )}

@@ -17,7 +17,7 @@ const KEYS = {
   schemaVersion: 'ventore_schema_version',
 };
 
-const CURRENT_SCHEMA_VERSION = '4';
+const CURRENT_SCHEMA_VERSION = '5';
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const CONDITIONS: DayCondition[] = ['Normal', 'Normal', 'Normal', 'Ramai', 'Normal', 'Hujan', 'Normal', 'Normal', 'Ramai', 'Normal', 'Normal', 'Normal', 'Normal', 'Normal'];
@@ -150,12 +150,12 @@ const SEED_MENUS: MenuItem[] = [
 ];
 
 const SEED_PRICES: IngredientPrices = {
-  beras: 12,
-  telur: 1500,
-  minyak_goreng: 20,
+  beras: 15,
+  telur: 2500,
+  minyak_goreng: 18,
   bawang_putih: 35,
   kecap_manis: 8,
-  garam: 5,
+  garam: 2,
   mie_instan: 3500,
   sawi: 8,
   kol: 6,
@@ -163,10 +163,11 @@ const SEED_PRICES: IngredientPrices = {
   ayam: 35,
   bawang_merah: 30,
   daun_bawang: 15,
-  air: 0,
+  air: 1,
   daging_sapi: 80,
   mie_bihun: 12,
-  tusuk_sate: 100,
+  mie_basah: 10,
+  tusuk_sate: 150,
   bumbu_kacang: 20,
   tepung_terigu: 14,
   teh_celup: 250,
@@ -176,6 +177,20 @@ const SEED_PRICES: IngredientPrices = {
   kopi_bubuk: 90,
   susu: 18,
 };
+
+function migrateIngredientPricesIfNeeded(): IngredientPrices {
+  const current = read<IngredientPrices>(KEYS.prices, {});
+  const merged: IngredientPrices = { ...SEED_PRICES, ...current };
+
+  const currentKeys = Object.keys(current);
+  const missingSeedKeys = Object.keys(SEED_PRICES).some((key) => current[key] === undefined);
+
+  if (currentKeys.length === 0 || missingSeedKeys) {
+    write(KEYS.prices, merged);
+  }
+
+  return merged;
+}
 
 function generateSeedSales(): SalesRecord[] {
   const records: SalesRecord[] = [];
@@ -279,6 +294,7 @@ export function initializeIfNeeded(): void {
 
   if (currentVersion !== CURRENT_SCHEMA_VERSION) {
     migrateMenuListIfNeeded();
+    migrateIngredientPricesIfNeeded();
     localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
   }
 
@@ -321,7 +337,7 @@ export function saveStockData(data: StockData): void {
 }
 
 export function getIngredientPrices(): IngredientPrices {
-  return read<IngredientPrices>(KEYS.prices, SEED_PRICES);
+  return migrateIngredientPricesIfNeeded();
 }
 
 export function saveIngredientPrices(prices: IngredientPrices): void {
@@ -342,6 +358,10 @@ export function appendWasteRecord(record: WasteRecord): void {
     log.push(record);
   }
   write(KEYS.waste, log);
+}
+
+export function clearWasteLog(): void {
+  write(KEYS.waste, []);
 }
 
 export const formatRp = (value: number): string =>
