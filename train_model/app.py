@@ -5,7 +5,6 @@ import requests
 from datetime import datetime, timedelta
 
 def get_weather_tomorrow():
-    """Mengambil data cuaca esok hari di Bekasi dari Open-Meteo API"""
     lat = -6.2349
     lon = 106.9896
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=weathercode&timezone=Asia%2FJakarta&forecast_days=2"
@@ -14,7 +13,7 @@ def get_weather_tomorrow():
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
-        weather_code = data['daily']['weathercode'][1] # Ambil data index 1 (Besok)
+        weather_code = data['daily']['weathercode'][1]
         
         if weather_code == 0:
             return "Cerah"
@@ -23,34 +22,29 @@ def get_weather_tomorrow():
         else:
             return "Hujan"
     except Exception as e:
-        return "Berawan" # Fallback jika gagal koneksi
+        return "Berawan"
 
-# --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Warung Forecaster", page_icon="📊", layout="wide")
+    st.set_page_config(page_title="Warung Forecaster", layout="wide")
 
-st.title("📊 Sistem Prediksi Stok & Inventaris Warung")
+    st.title("Sistem Prediksi Stok & Inventaris Warung")
 st.markdown("Sistem ini memprediksi porsi penjualan esok hari dengan menarik data cuaca secara otomatis dari Open-Meteo API.")
 
-# --- SIDEBAR (INPUT PENGGUNA) ---
-st.sidebar.header("⚙️ Parameter Esok Hari")
+    st.sidebar.header("Parameter Esok Hari")
 besok = datetime.now() + timedelta(days=1)
 st.sidebar.write(f"**Tanggal Prediksi:** {besok.strftime('%d %B %Y')}")
 
-# Menarik data cuaca dari API
 cuaca_otomatis = get_weather_tomorrow()
-st.sidebar.info(f"☁️ **Prakiraan Cuaca (Otomatis):** {cuaca_otomatis}")
+    st.sidebar.info(f"Prakiraan Cuaca (Otomatis): {cuaca_otomatis}")
 
 event_input = st.sidebar.selectbox(
     "Apakah ada event/momen khusus?",
     ("Tidak Ada", "Periode Gajian", "Promo Jumat Berkah")
 )
 
-tombol_prediksi = st.sidebar.button("🚀 Jalankan Prediksi", type="primary")
+tombol_prediksi = st.sidebar.button("Jalankan Prediksi", type="primary")
 
-# --- LOGIKA UTAMA ---
 if tombol_prediksi:
     try:
-        # Load model dengan 10 menu
         model = joblib.load("xgb_qty_sold_pipeline.joblib") 
         df_history = pd.read_csv("ventore_sales_10_menus.csv")
         df_history["date"] = pd.to_datetime(df_history["date"], dayfirst=False, errors="coerce")
@@ -83,7 +77,7 @@ if tombol_prediksi:
                 "menu_id": menu,
                 "menu_name": menu_name,
                 "unit_price": unit_price,
-                "weather": cuaca_otomatis, # Menggunakan cuaca dari API
+                "weather": cuaca_otomatis,
                 "event_flag": event_flag,       
                 "event_name": event_name,
                 "qty_sold_lag_1": lag_1_val,
@@ -98,14 +92,12 @@ if tombol_prediksi:
 
         data_besok = pd.DataFrame(prediction_rows)
 
-        # Prediksi
         predictions = model.predict(data_besok.drop(columns=["menu_name"])) 
         
         data_besok["Prediksi Porsi (Qty)"] = predictions.round().astype(int)
         data_besok["Prediksi Porsi (Qty)"] = data_besok["Prediksi Porsi (Qty)"].apply(lambda x: max(0, x))
         data_besok["Potensi Pendapatan"] = data_besok["Prediksi Porsi (Qty)"] * data_besok["unit_price"]
 
-    # --- VISUALISASI UI ---
     st.success("Prediksi berhasil dijalankan!")
     
     col1, col2 = st.columns(2)
@@ -119,14 +111,14 @@ if tombol_prediksi:
     col_tabel, col_grafik = st.columns([1, 1])
 
     with col_tabel:
-        st.subheader("📝 Detail Rencana Produksi")
+        st.subheader("Detail Rencana Produksi")
         df_display = data_besok[["menu_name", "Prediksi Porsi (Qty)"]].rename(columns={"menu_name": "Nama Menu"})
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     with col_grafik:
-        st.subheader("📈 Grafik Kebutuhan Stok")
+        st.subheader("Grafik Kebutuhan Stok")
         chart_data = df_display.set_index("Nama Menu")
         st.bar_chart(chart_data, color="#ffaa00")
         
 else:
-    st.info("👈 Silakan cek parameter di *sidebar* sebelah kiri, lalu klik **Jalankan Prediksi**.")
+    st.info("Silakan cek parameter di sidebar sebelah kiri, lalu klik Jalankan Prediksi.")

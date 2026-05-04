@@ -4,7 +4,6 @@ import requests
 from datetime import timedelta
 
 def get_weather_tomorrow():
-    """Mengambil data cuaca esok hari di Bekasi dari Open-Meteo API"""
     lat = -6.2349
     lon = 106.9896
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&daily=weathercode&timezone=Asia%2FJakarta&forecast_days=2"
