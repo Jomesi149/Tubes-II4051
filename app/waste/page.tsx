@@ -460,7 +460,7 @@ export default function WastePage() {
                       {record.items.map((item, j) => (
                         <div key={j} className="flex items-center justify-between text-[13px] text-ink-subtle">
                           <span>
-                            {item.ingredient} — {item.quantity} {item.unit} ({item.reason})
+                            {item.ingredient} - {item.quantity} {item.unit} ({item.reason})
                           </span>
                           <span className="text-ink-tertiary">{formatRp(item.total_loss)}</span>
                         </div>

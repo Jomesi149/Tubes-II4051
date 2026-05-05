@@ -366,7 +366,7 @@ export default function StockPage() {
             return (
               <div key={menu.id} className="bg-surface-2 rounded-lg p-4">
                 <p className="text-[14px] font-medium text-ink mb-2">{menu.name}</p>
-                <p className="text-[12px] text-ink-subtle mb-2">Target: {rec?.predicted_qty ?? '—'} porsi</p>
+                <p className="text-[12px] text-ink-subtle mb-2">Target: {rec?.predicted_qty ?? '-'} porsi</p>
                 {Object.entries(menu.recipe).map(([ingredient, qty]) => (
                   <div key={ingredient} className="flex justify-between text-[13px] text-ink-subtle">
                     <span className="capitalize">{ingredient.replace(/_/g, ' ')}</span>

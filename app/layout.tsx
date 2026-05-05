@@ -17,7 +17,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Ventoré — XGB Demand Forecast',
+  title: 'Ventoré',
   description: 'Prediksi komoditas F&B berbasis pipeline model XGB',
 };
 
