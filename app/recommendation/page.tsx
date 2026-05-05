@@ -2,7 +2,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from 'react';
-import { initializeIfNeeded, formatRp, todayString } from '@/lib/storage';
+import { initializeIfNeeded, formatRp, todayString, getMenuList } from '@/lib/storage';
 import {
   EVENT_OPTIONS,
   MODEL_MENU,
@@ -144,6 +144,46 @@ export default function RecommendationPage() {
   }
 
   const topItems = prediction?.predictions.slice(0, 3) ?? [];
+
+  const [selectedMenu, setSelectedMenu] = useState<null | { id: string; name: string; recipe?: Record<string, number> }>(null);
+
+  const INGREDIENT_UNITS: Record<string, string> = {
+    beras: 'gram',
+    telur: 'butir',
+    minyak_goreng: 'ml',
+    bawang_putih: 'gram',
+    kecap_manis: 'ml',
+    garam: 'gram',
+    mie_instan: 'bungkus',
+    sawi: 'gram',
+    kol: 'gram',
+    cabai: 'gram',
+    ayam: 'gram',
+    bawang_merah: 'gram',
+    daun_bawang: 'gram',
+    gula: 'gram',
+    air: 'ml',
+    daging_sapi: 'gram',
+    mie_bihun: 'gram',
+    tusuk_sate: 'buah',
+    bumbu_kacang: 'gram',
+    tepung_terigu: 'gram',
+    teh_celup: 'sachet',
+    es_batu: 'gram',
+    jeruk: 'buah',
+    kopi_bubuk: 'gram',
+    susu: 'ml',
+    mie_basah: 'gram',
+  };
+
+  useEffect(() => {
+    // load recipes into MODEL_MENU display from storage seed if available
+    initializeIfNeeded();
+    const menus = getMenuList();
+    // replace MODEL_MENU items with recipes when available
+    // (we don't mutate MODEL_MENU; we just keep recipes available when user clicks)
+    // store in a closure via selectedMenu when clicked
+  }, []);
 
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
@@ -309,9 +349,19 @@ export default function RecommendationPage() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {MODEL_MENU.map((menu) => (
-                    <div key={menu.id} className="rounded-lg border border-hairline bg-canvas px-3 py-2 text-[13px] text-ink-muted">
+                    <button
+                      key={menu.id}
+                      type="button"
+                      onClick={() => {
+                        // fetch recipe for this menu from storage
+                        const menus = getMenuList();
+                        const found = menus.find((m) => m.id === menu.id);
+                        setSelectedMenu(found ? { id: found.id, name: found.name, recipe: found.recipe } : { id: menu.id, name: menu.name });
+                      }}
+                      className="text-left rounded-lg border border-hairline bg-canvas px-3 py-2 text-[13px] text-ink-muted hover:bg-surface-2 transition-colors"
+                    >
                       {menu.name}
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -319,6 +369,38 @@ export default function RecommendationPage() {
           </div>
         </div>
       </div>
+
+      {selectedMenu && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-hairline bg-surface-1 p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[18px] font-medium">Resep - {selectedMenu.name}</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedMenu(null)}
+                className="w-9 h-9 rounded-full border border-hairline text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
+                aria-label="Tutup resep"
+              >
+                ×
+              </button>
+            </div>
+            <div>
+              {selectedMenu.recipe ? (
+                <div className="space-y-2">
+                  {Object.entries(selectedMenu.recipe).map(([ing, qty]) => (
+                    <div key={ing} className="flex justify-between text-[14px]">
+                      <span className="capitalize">{ing.replace(/_/g, ' ')}</span>
+                      <span className="text-ink-subtle">{qty} {INGREDIENT_UNITS[ing] ?? 'unit'}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[14px] text-ink-subtle">Resep tidak tersedia untuk item ini.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
