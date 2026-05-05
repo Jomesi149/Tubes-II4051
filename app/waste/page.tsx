@@ -3,14 +3,12 @@
 
 import { useEffect, useState } from 'react';
 import {
-  initializeIfNeeded,
-  getWasteLog,
-  appendWasteRecord,
-  getIngredientPrices,
-  getMenuList,
-  formatRp,
-  todayString,
-} from '@/lib/storage';
+  initializeBackendStore,
+  loadWasteLog,
+  loadIngredientPricesBackend,
+  persistWasteRecord,
+} from '@/lib/backend-store';
+import { getMenuList, formatRp, todayString } from '@/lib/storage';
 import type { WasteReason, WasteRecord, WasteItem, MenuItem } from '@/lib/types';
 
 const REASONS: WasteReason[] = ['Kedaluwarsa', 'Rusak', 'Sisa Produksi', 'Terbuang'];
@@ -23,10 +21,10 @@ const REASON_LABELS: Record<WasteReason, string> = {
 };
 
 const REASON_HELPERS: Record<WasteReason, string> = {
-  Kedaluwarsa: '',
-  Rusak: '',
-  'Sisa Produksi': '',
-  Terbuang: '',
+  Kedaluwarsa: 'Lewat tanggal simpan',
+  Rusak: 'Tidak layak pakai',
+  'Sisa Produksi': 'Berlebih setelah produksi',
+  Terbuang: 'Sisa yang harus dibuang',
 };
 
 const INGREDIENT_UNITS: Record<string, string> = {
@@ -162,55 +160,57 @@ export default function WastePage() {
   const [ingredientsList, setIngredientsList] = useState<string[]>([]);
 
   useEffect(() => {
-    initializeIfNeeded();
-    setLog(getWasteLog());
-    setPrices(getIngredientPrices());
-    // derive ingredient list from current menus (exclude minyak, air, es_batu, tusuk_sate)
-    const menus = getMenuList();
-    const all = new Set<string>();
-    menus.forEach((m: MenuItem) => Object.keys(m.recipe).forEach((ing) => all.add(ing)));
-    const excluded = new Set(['minyak_goreng', 'minyak', 'air', 'es_batu', 'tusuk_sate', 'minyak_ goreng']);
-    const filtered = Array.from(all).filter((i) => !Array.from(excluded).some((ex) => i.includes(ex)));
-    filtered.sort();
-    setIngredientsList(filtered);
-    // auto-select first ingredient if available
-    if (filtered.length > 0) {
-      const first = filtered[0];
-      setIngredient(first);
-      // set unit for first
-      const units: Record<string, string> = {
-        beras: 'gram',
-        garam: 'gram',
-        telur: 'butir',
-        mie_instan: 'bungkus',
-        mie_bihun: 'gram',
-        sawi: 'gram',
-        kol: 'gram',
-        cabai: 'gram',
-        ayam: 'gram',
-        bawang_putih: 'gram',
-        bawang_merah: 'gram',
-        daun_bawang: 'gram',
-        gula: 'gram',
-        kecap_manis: 'ml',
-        daging_sapi: 'gram',
-        tusuk_sate: 'buah',
-        bumbu_kacang: 'gram',
-        tepung_terigu: 'gram',
-        teh_celup: 'sachet',
-        es_batu: 'gram',
-        air: 'ml',
-        jeruk: 'buah',
-        kopi_bubuk: 'gram',
-        susu: 'ml',
-        mie_basah: 'gram',
-      };
-      setUnit(units[first] ?? 'unit');
-      const p = getIngredientPrices();
-      const keyPrice = p[first];
-      if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [first]: 0 }));
-      else setPrices((prev) => ({ ...prev, [first]: keyPrice }));
-    }
+    const load = async () => {
+      await initializeBackendStore();
+      setLog(await loadWasteLog());
+      setPrices(await loadIngredientPricesBackend());
+      // derive ingredient list from current menus (exclude minyak, air, es_batu, tusuk_sate)
+      const menus = getMenuList();
+      const all = new Set<string>();
+      menus.forEach((m: MenuItem) => Object.keys(m.recipe).forEach((ing) => all.add(ing)));
+      const excluded = new Set(['minyak_goreng', 'minyak', 'air', 'es_batu', 'tusuk_sate', 'minyak_ goreng']);
+      const filtered = Array.from(all).filter((i) => !Array.from(excluded).some((ex) => i.includes(ex)));
+      filtered.sort();
+      setIngredientsList(filtered);
+      // auto-select first ingredient if available
+      if (filtered.length > 0) {
+        const first = filtered[0];
+        setIngredient(first);
+        const units: Record<string, string> = {
+          beras: 'gram',
+          garam: 'gram',
+          telur: 'butir',
+          mie_instan: 'bungkus',
+          mie_bihun: 'gram',
+          sawi: 'gram',
+          kol: 'gram',
+          cabai: 'gram',
+          ayam: 'gram',
+          bawang_putih: 'gram',
+          bawang_merah: 'gram',
+          daun_bawang: 'gram',
+          gula: 'gram',
+          kecap_manis: 'ml',
+          daging_sapi: 'gram',
+          tusuk_sate: 'buah',
+          bumbu_kacang: 'gram',
+          tepung_terigu: 'gram',
+          teh_celup: 'sachet',
+          es_batu: 'gram',
+          air: 'ml',
+          jeruk: 'buah',
+          kopi_bubuk: 'gram',
+          susu: 'ml',
+          mie_basah: 'gram',
+        };
+        setUnit(units[first] ?? 'unit');
+        const keyPrice = (await loadIngredientPricesBackend())[first];
+        if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [first]: 0 }));
+        else setPrices((prev) => ({ ...prev, [first]: keyPrice }));
+      }
+    };
+
+    void load();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -232,10 +232,9 @@ export default function WastePage() {
     };
 
     const record: WasteRecord = { date, items: [item], total_daily_loss: totalLoss };
-    appendWasteRecord(record);
-
-    const newLog = getWasteLog();
-    setLog(newLog);
+    void persistWasteRecord(record).then(async () => {
+      setLog(await loadWasteLog());
+    });
     setSaved(true);
     setQuantity('');
     setTimeout(() => setSaved(false), 2500);
@@ -298,8 +297,7 @@ export default function WastePage() {
                   setIngredient(val);
                   // auto-set unit when ingredient selected
                   setUnit(INGREDIENT_UNITS[val] ?? 'unit');
-                  const p = getIngredientPrices();
-                  const keyPrice = p[val];
+                  const keyPrice = prices[val];
                   if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [val]: 0 }));
                   else setPrices((prev) => ({ ...prev, [val]: keyPrice }));
                 }}

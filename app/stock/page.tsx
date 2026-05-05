@@ -2,7 +2,9 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
 import { useEffect, useMemo, useState } from 'react';
-import { initializeIfNeeded, getMenuList, getStockData, saveStockData, todayString } from '@/lib/storage';
+import { initializeBackendStore, loadStockData, persistStockData } from '@/lib/backend-store';
+import { getMenuList, todayString } from '@/lib/storage';
+import { requestModelPrediction } from '@/lib/model-service';
 import { type EventOptionValue, type ModelPredictionResponse, type WeatherOption } from '@/lib/model-prediction';
 import type { MenuItem } from '@/lib/types';
 
@@ -109,18 +111,7 @@ export default function StockPage() {
             ? 'Promo Jumat Berkah'
             : 'missing';
 
-      const modelResponse = await fetch('/api/model-prediction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weather, event }),
-      });
-
-      const modelData = (await modelResponse.json()) as ModelPredictionResponse & { error?: string; message?: string };
-
-      if (!modelResponse.ok) {
-        throw new Error(modelData.error || modelData.message || 'Gagal memuat prediksi hari ini.');
-      }
-
+      const modelData = await requestModelPrediction({ weather, event });
       setPrediction(modelData);
     } catch (error) {
       console.error('Error fetching today prediction for stock page:', error);
@@ -167,21 +158,25 @@ export default function StockPage() {
   }
 
   useEffect(() => {
-    initializeIfNeeded();
-    const loadedMenus = getMenuList();
-    setMenus(loadedMenus);
+    const load = async () => {
+      await initializeBackendStore();
+      const loadedMenus = getMenuList();
+      setMenus(loadedMenus);
 
-    const savedStock = getStockData();
-    const allIngredients = new Set<string>();
-    loadedMenus.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
+      const savedStock = await loadStockData();
+      const allIngredients = new Set<string>();
+      loadedMenus.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
 
-    const initialStock: Record<string, string> = {};
-    allIngredients.forEach((ingredient) => {
-      initialStock[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
-    });
+      const initialStock: Record<string, string> = {};
+      allIngredients.forEach((ingredient) => {
+        initialStock[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
+      });
 
-    setStock(initialStock);
-    void fetchTodayPrediction();
+      setStock(initialStock);
+      void fetchTodayPrediction();
+    };
+
+    void load();
   }, []);
 
   useEffect(() => {
@@ -223,7 +218,7 @@ export default function StockPage() {
       nextStock[ingredient] = current + added;
     });
 
-    saveStockData(nextStock);
+    void persistStockData(nextStock);
     setStock(
       Object.fromEntries(Object.entries(nextStock).map(([ingredient, value]) => [ingredient, String(value)]))
     );
@@ -241,7 +236,7 @@ export default function StockPage() {
       nextStock[ingredient] = Math.max(0, current - used);
     });
 
-    saveStockData(nextStock);
+    void persistStockData(nextStock);
     setStock(
       Object.fromEntries(Object.entries(nextStock).map(([ingredient, value]) => [ingredient, String(value)]))
     );

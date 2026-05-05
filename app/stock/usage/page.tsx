@@ -3,7 +3,8 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { getMenuList, getStockData, initializeIfNeeded, saveStockData } from '@/lib/storage';
+import { initializeBackendStore, loadStockData, persistStockData } from '@/lib/backend-store';
+import { getMenuList } from '@/lib/storage';
 import type { MenuItem } from '@/lib/types';
 
 export default function StockUsagePage() {
@@ -44,23 +45,27 @@ export default function StockUsagePage() {
   );
 
   useEffect(() => {
-    initializeIfNeeded();
-    const loadedMenus = getMenuList();
-    setMenus(loadedMenus);
+    const load = async () => {
+      await initializeBackendStore();
+      const loadedMenus = getMenuList();
+      setMenus(loadedMenus);
 
-    const savedStock = getStockData();
-    const allIngredients = new Set<string>();
-    loadedMenus.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
+      const savedStock = await loadStockData();
+      const allIngredients = new Set<string>();
+      loadedMenus.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
 
-    const initialStock: Record<string, string> = {};
-    const initialUsage: Record<string, string> = {};
-    allIngredients.forEach((ingredient) => {
-      initialStock[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
-      initialUsage[ingredient] = '';
-    });
+      const initialStock: Record<string, string> = {};
+      const initialUsage: Record<string, string> = {};
+      allIngredients.forEach((ingredient) => {
+        initialStock[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
+        initialUsage[ingredient] = '';
+      });
 
-    setStock(initialStock);
-    setUsage(initialUsage);
+      setStock(initialStock);
+      setUsage(initialUsage);
+    };
+
+    void load();
   }, []);
 
   const handleSaveUsage = () => {
@@ -72,7 +77,7 @@ export default function StockUsagePage() {
       nextStock[ingredient] = Math.max(0, current - used);
     });
 
-    saveStockData(nextStock);
+    void persistStockData(nextStock);
     setStock(
       Object.fromEntries(Object.entries(nextStock).map(([ingredient, value]) => [ingredient, String(value)]))
     );

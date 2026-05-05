@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { initializeIfNeeded, formatRp, todayString, getMenuList } from '@/lib/storage';
+import { requestModelPrediction } from '@/lib/model-service';
 import {
   EVENT_OPTIONS,
   MODEL_MENU,
@@ -122,18 +123,7 @@ export default function RecommendationPage() {
     setError('');
 
     try {
-      const response = await fetch('/api/model-prediction', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weather, event }),
-      });
-
-      const data = (await response.json()) as ModelPredictionResponse & { message?: string; error?: string };
-
-      if (!response.ok) {
-        throw new Error(data.error || data.message || 'Gagal memuat prediksi.');
-      }
-
+      const data = await requestModelPrediction({ weather, event });
       setPrediction(data);
     } catch (err) {
       setPrediction(null);

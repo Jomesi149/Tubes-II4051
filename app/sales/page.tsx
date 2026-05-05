@@ -2,14 +2,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from 'react';
-import {
-  initializeIfNeeded,
-  getMenuList,
-  getSalesHistory,
-  appendSalesRecord,
-  todayString,
-  DAY_NAMES_EXPORTED,
-} from '@/lib/storage';
+import { initializeBackendStore, loadSalesHistory, persistSalesRecord } from '@/lib/backend-store';
+import { getMenuList, todayString, DAY_NAMES_EXPORTED } from '@/lib/storage';
 import { WEATHER_OPTIONS, type WeatherOption } from '@/lib/model-prediction';
 import type { MenuItem, SalesRecord } from '@/lib/types';
 
@@ -63,16 +57,20 @@ export default function SalesPage() {
   }
 
   useEffect(() => {
-    initializeIfNeeded();
-    const m = getMenuList();
-    setMenus(m);
-    setHistory(getSalesHistory());
-    const initial: Record<string, string> = {};
-    m.forEach((menu) => {
-      initial[menu.id] = '';
-    });
-    setSales(initial);
-    void fetchWeatherForDate(date);
+    const load = async () => {
+      await initializeBackendStore();
+      const m = getMenuList();
+      setMenus(m);
+      setHistory(await loadSalesHistory());
+      const initial: Record<string, string> = {};
+      m.forEach((menu) => {
+        initial[menu.id] = '';
+      });
+      setSales(initial);
+      void fetchWeatherForDate(date);
+    };
+
+    void load();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -92,8 +90,9 @@ export default function SalesPage() {
       sales: parsedSales,
     };
 
-    appendSalesRecord(record);
-    setHistory(getSalesHistory());
+    void persistSalesRecord(record).then(async () => {
+      setHistory(await loadSalesHistory());
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };

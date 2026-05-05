@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { initializeIfNeeded, getWasteLog, formatRp, todayString } from '@/lib/storage';
-import type { ModelPredictionResponse, WeatherOption } from '@/lib/model-prediction';
+import { initializeBackendStore, loadWasteLog } from '@/lib/backend-store';
+import { formatRp, todayString } from '@/lib/storage';
+import { requestModelPrediction } from '@/lib/model-service';
+import type { EventOptionValue, ModelPredictionResponse, WeatherOption } from '@/lib/model-prediction';
 import { MODEL_MENU } from '@/lib/model-prediction';
 
 interface DashboardData {
@@ -21,19 +23,19 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
-    initializeIfNeeded();
-    const wasteLog = getWasteLog();
-    const totalWasteLoss = wasteLog.reduce((sum, r) => sum + r.total_daily_loss, 0);
-
     async function loadPrediction() {
       try {
+        await initializeBackendStore();
+        const wasteLog = await loadWasteLog();
+        const totalWasteLoss = wasteLog.reduce((sum, r) => sum + r.total_daily_loss, 0);
+
         // Get today's date
         const today = todayString();
         const dateObj = new Date(today);
 
         // Auto-detect weather for today
         let weather: WeatherOption = 'Berawan';
-        let event: string = 'missing';
+        let event: EventOptionValue = 'missing';
 
         try {
           const weatherResponse = await fetch(
@@ -76,13 +78,7 @@ export default function Dashboard() {
         }
 
         // Fetch prediction
-        const response = await fetch('/api/model-prediction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ weather, event }),
-        });
-
-        const prediction = (await response.json()) as ModelPredictionResponse;
+        const prediction = await requestModelPrediction({ weather, event });
         setData({
           predictionDate: prediction.prediction_date,
           weather: prediction.weather,

@@ -3,7 +3,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { getMenuList, getStockData, initializeIfNeeded, saveStockData } from '@/lib/storage';
+import { initializeBackendStore, loadStockData, persistStockData } from '@/lib/backend-store';
+import { getMenuList } from '@/lib/storage';
 import type { MenuItem } from '@/lib/types';
 
 export default function StockInputPage() {
@@ -40,19 +41,23 @@ export default function StockInputPage() {
   };
 
   useEffect(() => {
-    initializeIfNeeded();
-    const m = getMenuList();
-    setMenus(m);
+    const load = async () => {
+      await initializeBackendStore();
+      const m = getMenuList();
+      setMenus(m);
 
-    const savedStock = getStockData();
-    const allIngredients = new Set<string>();
-    m.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
+      const savedStock = await loadStockData();
+      const allIngredients = new Set<string>();
+      m.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
 
-    const initial: Record<string, string> = {};
-    allIngredients.forEach((ingredient) => {
-      initial[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
-    });
-    setStock(initial);
+      const initial: Record<string, string> = {};
+      allIngredients.forEach((ingredient) => {
+        initial[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
+      });
+      setStock(initial);
+    };
+
+    void load();
   }, []);
 
   const handleSave = () => {
@@ -60,7 +65,7 @@ export default function StockInputPage() {
     Object.entries(stock).forEach(([ingredient, value]) => {
       stockData[ingredient] = parseFloat(value) || 0;
     });
-    saveStockData(stockData);
+    void persistStockData(stockData);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
