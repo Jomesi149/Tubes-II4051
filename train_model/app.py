@@ -57,8 +57,8 @@ if tombol_prediksi:
         menus = df_history["menu_id"].unique()
         prediction_rows = []
         
-        event_flag = 0 if event_input == "Tidak Ada" else 1
-        event_name = "missing" if event_input == "Tidak Ada" else event_input
+        event_flag = 0 if event_input == "Tidak Ada Event" else 1
+        event_name = "missing" if event_input == "Tidak Ada Event" else event_input
 
         for menu in menus:
             menu_df = df_history[df_history["menu_id"] == menu]

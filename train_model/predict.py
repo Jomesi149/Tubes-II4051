@@ -105,7 +105,7 @@ def predict_tomorrow_sales(weather_override=None, event_name_override="missing",
     result = {
         "prediction_date": besok.strftime("%Y-%m-%d"),
         "weather": cuaca_besok,
-        "event_label": "Tidak Ada" if event_name == "missing" else event_name,
+        "event_label": "Tidak Ada Event" if event_name == "missing" else event_name,
         "event_name": event_name,
         "total_qty": int(data_besok["predicted_qty"].sum()),
         "total_revenue": float(data_besok["predicted_revenue"].sum()),

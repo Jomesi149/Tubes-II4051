@@ -175,11 +175,11 @@ export default function RecommendationPage() {
             {/* Weather Display (Auto-fetched) */}
             <div>
               <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px] mb-3">
-                Cuaca (Otomatis)
+                Cuaca 
               </p>
               <div className="px-3 py-2 rounded-md bg-surface-2 border border-hairline">
                 <p className="text-[16px] font-medium text-ink">{weather}</p>
-                <p className="text-[12px] text-ink-subtle">Diambil dari OpenWeatherMap untuk tanggal pilihan</p>
+                <p className="text-[12px] text-ink-subtle">Diambil dari OpenWeatherMap</p>
               </div>
             </div>
 

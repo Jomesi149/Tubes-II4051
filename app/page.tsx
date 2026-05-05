@@ -97,7 +97,7 @@ export default function Dashboard() {
         setData({
           predictionDate: '-',
           weather: 'Berawan',
-          eventLabel: 'Tidak Ada',
+          eventLabel: 'Tidak Ada Event',
           totalQty: 0,
           totalRevenue: 0,
           topMenu: '-',
@@ -143,12 +143,11 @@ export default function Dashboard() {
 
         <div className="group block bg-surface-1 border border-hairline rounded-lg p-6">
           <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-3">
-            Komoditas Teratas
+            Menu Teratas
           </p>
           <p className="text-[28px] font-semibold text-ink tracking-[-0.8px] leading-none mb-1">
             {data.topMenu}
           </p>
-          <p className="text-[14px] text-ink-muted">Prediksi paling tinggi untuk sesi berikutnya</p>
         </div>
 
         <Link
@@ -161,7 +160,6 @@ export default function Dashboard() {
           <p className="text-[40px] font-semibold text-ink tracking-[-1px] leading-none mb-1">
             {formatRp(data.totalWasteLoss)}
           </p>
-          <p className="text-[14px] text-ink-muted">akumulasi kerugian</p>
           <p className="text-[13px] text-primary mt-4 group-hover:text-primary-hover transition-colors">
             Lihat log waste →
           </p>
@@ -174,11 +172,11 @@ export default function Dashboard() {
           <p className="text-[18px] font-medium text-ink">{data.predictionDate}</p>
         </div>
         <div>
-          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Revenue Model</p>
+          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Prediksi Revenue</p>
           <p className="text-[18px] font-medium text-ink">{formatRp(data.totalRevenue)}</p>
         </div>
         <div>
-          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Waste Akumulasi</p>
+          <p className="text-[12px] uppercase tracking-[0.4px] text-ink-subtle mb-1">Akumulasi waste</p>
           <p className="text-[18px] font-medium text-ink">{formatRp(data.totalWasteLoss)}</p>
         </div>
       </div>

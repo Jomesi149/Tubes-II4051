@@ -261,7 +261,7 @@ export default function StockPage() {
       <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Aksi Stok</p>
-          <p className="text-[14px] text-ink-muted">Buka popup untuk menambah stok atau mencatat pemakaian stok manual hari ini.</p>
+          <p className="text-[14px] text-ink-muted">Buka untuk menambah stok atau mencatat pemakaian stok hari ini.</p>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
           <button

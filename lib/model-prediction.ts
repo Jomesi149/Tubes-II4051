@@ -14,7 +14,7 @@ export const MODEL_MENU = [
 export const WEATHER_OPTIONS = ['Cerah', 'Berawan', 'Hujan'] as const;
 
 export const EVENT_OPTIONS = [
-  { label: 'Tidak Ada', value: 'missing' },
+  { label: 'Tidak Ada Event', value: 'missing' },
   { label: 'Promo Awal Bulan', value: 'Promo Awal Bulan' },
   { label: 'Promo Jumat Berkah', value: 'Promo Jumat Berkah' },
 ] as const;
