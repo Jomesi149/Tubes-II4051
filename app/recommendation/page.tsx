@@ -148,13 +148,7 @@ export default function RecommendationPage() {
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
-        <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-1">
-          Modul Prediksi
-        </p>
-        <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Prediksi Komoditas XGB</h1>
-        <p className="text-[16px] text-ink-muted mt-1">
-          Model memakai pipeline xgb_qty_sold_pipeline.joblib untuk 10 komoditas menu.
-        </p>
+        <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Prediksi Komoditas Harian</h1>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">

@@ -121,9 +121,6 @@ export default function Dashboard() {
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
-        <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-1">
-          Pusat Kendali
-        </p>
         <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Dashboard</h1>
       </div>
 

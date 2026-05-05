@@ -255,9 +255,7 @@ export default function StockPage() {
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
-        <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-1">Modul 4</p>
         <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Stok & Alert</h1>
-        <p className="text-[16px] text-ink-muted mt-1">Pantau ketersediaan bahan baku vs kebutuhan produksi hari ini</p>
       </div>
 
       <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex items-center justify-between gap-3">

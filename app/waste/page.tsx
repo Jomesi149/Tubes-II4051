@@ -264,13 +264,9 @@ export default function WastePage() {
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
-        <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-1">
-          Modul 5
-        </p>
+        
         <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Log Waste</h1>
-        <p className="text-[16px] text-ink-muted mt-1">
-          Catat dan evaluasi pembuangan bahan baku harian
-        </p>
+        
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
