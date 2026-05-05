@@ -23,10 +23,10 @@ const REASON_LABELS: Record<WasteReason, string> = {
 };
 
 const REASON_HELPERS: Record<WasteReason, string> = {
-  Kedaluwarsa: 'Lewat tanggal simpan',
-  Rusak: 'Tidak layak pakai',
-  'Sisa Produksi': 'Berlebih setelah produksi',
-  Terbuang: 'Sisa yang harus dibuang',
+  Kedaluwarsa: '',
+  Rusak: '',
+  'Sisa Produksi': '',
+  Terbuang: '',
 };
 
 const INGREDIENT_UNITS: Record<string, string> = {
