@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useAuth } from './AuthProvider';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: '◈' },
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <>
@@ -71,6 +73,8 @@ function NavLinks({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  const { user, logout } = useAuth();
+
   return (
     <ul className="space-y-0.5 px-3">
       {NAV_ITEMS.map((item) => {
@@ -92,6 +96,41 @@ function NavLinks({
           </li>
         );
       })}
+
+      <li className="mt-4 border-t border-hairline pt-4">
+        {user ? (
+          <div className="rounded-lg bg-surface-2 p-3 text-sm">
+            <p className="font-semibold text-ink">{user.username}</p>
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                onNavigate?.();
+              }}
+              className="mt-2 text-sm font-medium text-primary"
+            >
+              Keluar
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Link
+              href="/login"
+              onClick={onNavigate}
+              className="flex items-center justify-center rounded-lg border border-hairline px-3 py-2 text-sm font-semibold text-ink transition hover:bg-surface-2"
+            >
+              Masuk
+            </Link>
+            <Link
+              href="/register"
+              onClick={onNavigate}
+              className="flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
+            >
+              Daftar
+            </Link>
+          </div>
+        )}
+      </li>
     </ul>
   );
 }
