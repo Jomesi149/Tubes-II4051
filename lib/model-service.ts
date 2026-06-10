@@ -8,11 +8,31 @@ export const MODEL_SERVICE_ENDPOINT =
 export interface ModelPredictionRequest {
   weather: WeatherOption;
   event: EventOptionValue;
+  userId?: string;
+}
+
+function getCurrentUserId(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    const raw = window.localStorage.getItem('ventore-auth-user');
+    if (!raw) {
+      return '';
+    }
+
+    const parsed = JSON.parse(raw) as { user_id?: string };
+    return parsed.user_id ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export async function requestModelPrediction(
   input: ModelPredictionRequest,
 ): Promise<ModelPredictionResponse> {
+  const userId = input.userId ?? getCurrentUserId();
   const response = await fetch(MODEL_SERVICE_ENDPOINT, {
     method: 'POST',
     headers: {
@@ -20,7 +40,7 @@ export async function requestModelPrediction(
       'x-model-provider': MODEL_SERVICE_PROVIDER,
       'x-hf-space-id': MODEL_SERVICE_SPACE_ID,
     },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, userId }),
   });
 
   const data = (await response.json()) as ModelPredictionResponse & {

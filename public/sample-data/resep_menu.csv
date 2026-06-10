@@ -1,0 +1,14 @@
+menu_id,menu_name,ingredient_name,quantity_per_portion,unit
+M01,Mie Ayam,Mie Basah,100,gram
+M01,Mie Ayam,Daging Ayam Cincang,50,gram
+M01,Mie Ayam,Minyak Bawang,15,ml
+M01,Mie Ayam,Pangsit Rebus,2,pcs
+M01,Mie Ayam,Sawi Hijau,20,gram
+M02,Nasi Goreng,Nasi Putih,200,gram
+M02,Nasi Goreng,Daging Ayam Cincang,30,gram
+M02,Nasi Goreng,Telur,1,pcs
+M02,Nasi Goreng,Kecap Manis,20,ml
+M03,Ayam Geprek,Ayam,120,gram
+M03,Ayam Geprek,Tepung Terigu,40,gram
+M03,Ayam Geprek,Cabai,10,gram
+M03,Ayam Geprek,Minyak Goreng,15,ml

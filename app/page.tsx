@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { initializeBackendStore, loadWasteLog } from '@/lib/backend-store';
-import { formatRp, todayString } from '@/lib/storage';
+import { formatRp, getModelTrainingStatus, isSalesUploadCompleted, todayString, type ModelTrainingStatus } from '@/lib/storage';
 import { requestModelPrediction } from '@/lib/model-service';
 import type { EventOptionValue, ModelPredictionResponse, WeatherOption } from '@/lib/model-prediction';
 import { MODEL_MENU } from '@/lib/model-prediction';
@@ -21,10 +21,32 @@ interface DashboardData {
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>(getModelTrainingStatus());
+  const [isLocked, setIsLocked] = useState(!isSalesUploadCompleted());
+
+  useEffect(() => {
+    const syncStatus = () => {
+      setModelStatus(getModelTrainingStatus());
+      setIsLocked(!isSalesUploadCompleted());
+    };
+
+    syncStatus();
+    window.addEventListener('ventore-model-status-changed', syncStatus);
+
+    return () => {
+      window.removeEventListener('ventore-model-status-changed', syncStatus);
+    };
+  }, []);
 
   useEffect(() => {
     async function loadPrediction() {
+      if (!isSalesUploadCompleted()) {
+        setIsLocked(true);
+        return;
+      }
+
       try {
+        setIsLocked(false);
         await initializeBackendStore();
         const wasteLog = await loadWasteLog();
         const totalWasteLoss = wasteLog.reduce((sum, r) => sum + r.total_daily_loss, 0);
@@ -103,8 +125,30 @@ export default function Dashboard() {
       }
     }
 
-    void loadPrediction();
-  }, []);
+    if (!isLocked) {
+      void loadPrediction();
+    }
+  }, [isLocked]);
+
+  if (isLocked) {
+    return (
+      <div className="p-6 lg:p-8 max-w-[960px] mx-auto">
+        <div className="rounded-xl border border-hairline bg-surface-1 p-8 text-center">
+          <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Dashboard Terkunci</h1>
+          <p className="mt-3 text-sm text-ink-subtle">
+            {modelStatus === 'training'
+              ? 'Model sedang dilatih. Tunggu sampai status berubah menjadi siap digunakan.'
+              : 'Halaman prediksi dan dashboard hanya bisa dibuka setelah upload data penjualan selesai dan model selesai dilatih.'}
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link href="/sales" className="rounded-md bg-primary px-[14px] py-2 text-sm font-semibold text-white">
+              Buka halaman upload sales
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!data) {
     return (

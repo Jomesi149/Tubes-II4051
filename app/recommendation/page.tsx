@@ -2,7 +2,15 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useState } from 'react';
-import { initializeIfNeeded, formatRp, todayString, getMenuList } from '@/lib/storage';
+import {
+  initializeIfNeeded,
+  formatRp,
+  todayString,
+  getMenuList,
+  getModelTrainingStatus,
+  isSalesUploadCompleted,
+  type ModelTrainingStatus,
+} from '@/lib/storage';
 import { requestModelPrediction } from '@/lib/model-service';
 import {
   EVENT_OPTIONS,
@@ -20,6 +28,8 @@ export default function RecommendationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isDateValid, setIsDateValid] = useState(true);
+  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>(getModelTrainingStatus());
+  const [isLocked, setIsLocked] = useState(!isSalesUploadCompleted());
 
   async function fetchWeatherForDate(dateStr: string) {
     try {
@@ -109,9 +119,25 @@ export default function RecommendationPage() {
   }
 
   useEffect(() => {
+    const syncStatus = () => {
+      setModelStatus(getModelTrainingStatus());
+      setIsLocked(!isSalesUploadCompleted());
+    };
+
+    syncStatus();
+    window.addEventListener('ventore-model-status-changed', syncStatus);
+
+    return () => {
+      window.removeEventListener('ventore-model-status-changed', syncStatus);
+    };
+  }, []);
+
+  useEffect(() => {
     initializeIfNeeded();
-    void fetchWeatherForDate(predictionDate);
-  }, [predictionDate]);
+    if (!isLocked) {
+      void fetchWeatherForDate(predictionDate);
+    }
+  }, [predictionDate, isLocked]);
 
   async function handlePredict() {
     if (!isDateValid) {
@@ -134,6 +160,26 @@ export default function RecommendationPage() {
   }
 
   const topItems = prediction?.predictions.slice(0, 3) ?? [];
+
+  if (isLocked) {
+    return (
+      <div className="p-6 lg:p-8 max-w-[960px] mx-auto">
+        <div className="rounded-xl border border-hairline bg-surface-1 p-8 text-center">
+          <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Prediksi Model Terkunci</h1>
+          <p className="mt-3 text-sm text-ink-subtle">
+            {modelStatus === 'training'
+              ? 'Model sedang dilatih. Tunggu sampai status berubah menjadi siap digunakan.'
+              : 'Silakan unggah data penjualan satu kali di halaman sales lalu tunggu model selesai dilatih sebelum membuka halaman prediksi.'}
+          </p>
+          <div className="mt-6 flex justify-center">
+            <a href="/sales" className="rounded-md bg-primary px-[14px] py-2 text-sm font-semibold text-white">
+              Buka halaman upload sales
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const [selectedMenu, setSelectedMenu] = useState<null | { id: string; name: string; recipe?: Record<string, number> }>(null);
 

@@ -1,0 +1,11 @@
+date,day_name,day_of_week,is_weekend,month,week_of_year,weather,event_flag,event_name,menu_id,menu_name,unit_price,qty_sold,gross_sales,target_qty_sold
+2026-06-01,Senin,0,0,6,23,Cerah,0,missing,M01,Mie Ayam,15000,35,525000,40
+2026-06-02,Selasa,1,0,6,23,Berawan,0,missing,M01,Mie Ayam,15000,38,570000,40
+2026-06-03,Rabu,2,0,6,23,Cerah,0,missing,M02,Nasi Goreng,18000,42,756000,45
+2026-06-04,Kamis,3,0,6,23,Hujan,0,missing,M02,Nasi Goreng,18000,39,702000,45
+2026-06-05,Jumat,4,0,6,23,Berawan,1,Promo Jumat Berkah,M03,Ayam Geprek,22000,28,616000,30
+2026-06-06,Sabtu,5,1,6,23,Cerah,0,missing,M01,Mie Ayam,15000,45,675000,50
+2026-06-07,Minggu,6,1,6,23,Berawan,0,missing,M02,Nasi Goreng,18000,48,864000,50
+2026-06-08,Senin,0,0,6,24,Hujan,0,missing,M03,Ayam Geprek,22000,25,550000,30
+2026-06-09,Selasa,1,0,6,24,Cerah,0,missing,M01,Mie Ayam,15000,41,615000,45
+2026-06-10,Rabu,2,0,6,24,Berawan,0,missing,M02,Nasi Goreng,18000,43,774000,45

@@ -5,10 +5,9 @@ import { useEffect, useState } from 'react';
 import {
   initializeBackendStore,
   loadWasteLog,
-  loadIngredientPricesBackend,
   persistWasteRecord,
 } from '@/lib/backend-store';
-import { getMenuList, formatRp, todayString } from '@/lib/storage';
+import { clearHistoricalData, getMenuList, formatRp, todayString } from '@/lib/storage';
 import type { WasteReason, WasteRecord, WasteItem, MenuItem } from '@/lib/types';
 
 const REASONS: WasteReason[] = ['Kedaluwarsa', 'Rusak', 'Sisa Produksi', 'Terbuang'];
@@ -150,10 +149,10 @@ function WasteChart({ data }: { data: ChartPoint[] }) {
 
 export default function WastePage() {
   const [log, setLog] = useState<WasteRecord[]>([]);
-  const [prices, setPrices] = useState<Record<string, number>>({});
   const [date, setDate] = useState(todayString());
   const [ingredient, setIngredient] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
   const [unit, setUnit] = useState('gram');
   const [reason, setReason] = useState<WasteReason>('Sisa Produksi');
   const [saved, setSaved] = useState(false);
@@ -161,10 +160,9 @@ export default function WastePage() {
 
   useEffect(() => {
     const load = async () => {
+      clearHistoricalData();
       await initializeBackendStore();
       setLog(await loadWasteLog());
-      setPrices(await loadIngredientPricesBackend());
-      // derive ingredient list from current menus (exclude minyak, air, es_batu, tusuk_sate)
       const menus = getMenuList();
       const all = new Set<string>();
       menus.forEach((m: MenuItem) => Object.keys(m.recipe).forEach((ing) => all.add(ing)));
@@ -172,7 +170,6 @@ export default function WastePage() {
       const filtered = Array.from(all).filter((i) => !Array.from(excluded).some((ex) => i.includes(ex)));
       filtered.sort();
       setIngredientsList(filtered);
-      // auto-select first ingredient if available
       if (filtered.length > 0) {
         const first = filtered[0];
         setIngredient(first);
@@ -204,9 +201,6 @@ export default function WastePage() {
           mie_basah: 'gram',
         };
         setUnit(units[first] ?? 'unit');
-        const keyPrice = (await loadIngredientPricesBackend())[first];
-        if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [first]: 0 }));
-        else setPrices((prev) => ({ ...prev, [first]: keyPrice }));
       }
     };
 
@@ -219,7 +213,7 @@ export default function WastePage() {
     if (date > todayString()) return;
 
     const qty = parseFloat(quantity);
-    const unitPrice = prices[ingredient] ?? 0;
+    const unitPrice = parseFloat(manualPrice) || 0;
     const totalLoss = qty * unitPrice;
 
     const item: WasteItem = {
@@ -237,6 +231,7 @@ export default function WastePage() {
     });
     setSaved(true);
     setQuantity('');
+    setManualPrice('');
     setTimeout(() => setSaved(false), 2500);
   };
 
@@ -263,9 +258,7 @@ export default function WastePage() {
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
-        
         <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Log Waste</h1>
-        
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -295,11 +288,7 @@ export default function WastePage() {
                 onChange={(e) => {
                   const val = e.target.value;
                   setIngredient(val);
-                  // auto-set unit when ingredient selected
                   setUnit(INGREDIENT_UNITS[val] ?? 'unit');
-                  const keyPrice = prices[val];
-                  if (keyPrice === undefined) setPrices((prev) => ({ ...prev, [val]: 0 }));
-                  else setPrices((prev) => ({ ...prev, [val]: keyPrice }));
                 }}
                 required
                 className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink focus:outline-none focus:border-hairline-strong"
@@ -335,6 +324,20 @@ export default function WastePage() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-[14px] text-ink-muted mb-1.5">Harga per Unit</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={manualPrice}
+                onChange={(e) => setManualPrice(e.target.value)}
+                placeholder="0"
+                required
+                className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink placeholder:text-ink-tertiary focus:outline-none focus:border-hairline-strong"
+              />
+            </div>
+
             {/* Reason */}
             <div>
               <label className="block text-[14px] text-ink-muted mb-2">Alasan</label>
@@ -360,11 +363,11 @@ export default function WastePage() {
             </div>
 
             {/* Cost preview */}
-            {ingredient && quantity && prices[ingredient] !== undefined && (
+            {ingredient && quantity && manualPrice && (
               <div className="bg-surface-2 rounded-md px-4 py-3">
                 <p className="text-[13px] text-ink-subtle">Estimasi kerugian:</p>
                 <p className="text-[22px] font-medium text-ink tracking-[-0.4px]">
-                  {formatRp(parseFloat(quantity) * (prices[ingredient] ?? 0))}
+                  {formatRp(parseFloat(quantity) * parseFloat(manualPrice))}
                 </p>
               </div>
             )}

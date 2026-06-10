@@ -2,8 +2,9 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
 import { useEffect, useMemo, useState } from 'react';
+import Papa from 'papaparse';
 import { initializeBackendStore, loadStockData, persistStockData } from '@/lib/backend-store';
-import { getMenuList, todayString } from '@/lib/storage';
+import { getMenuList, hasPersonalRecipeData, saveMenuList, todayString } from '@/lib/storage';
 import { requestModelPrediction } from '@/lib/model-service';
 import { type EventOptionValue, type ModelPredictionResponse, type WeatherOption } from '@/lib/model-prediction';
 import type { MenuItem } from '@/lib/types';
@@ -58,6 +59,11 @@ export default function StockPage() {
   const [usageAmounts, setUsageAmounts] = useState<Record<string, string>>({});
   const [modalError, setModalError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [recipeUploadMessage, setRecipeUploadMessage] = useState('');
+  const [recipeUploadError, setRecipeUploadError] = useState('');
+  const [recipeUploading, setRecipeUploading] = useState(false);
+  const [recipeFileName, setRecipeFileName] = useState('');
+  const [hasPersonalRecipes, setHasPersonalRecipes] = useState(false);
 
   const stockIngredients = useMemo(() => Object.keys(stock), [stock]);
 
@@ -122,6 +128,101 @@ export default function StockPage() {
     }
   }
 
+  function buildMenusFromRecipeRows(rows: Array<Record<string, unknown>>): MenuItem[] {
+    const menuMap = new Map<string, { id: string; name: string; recipe: Record<string, number> }>();
+
+    rows.forEach((row) => {
+      const rawMenuId = String(row.menu_id ?? row.menuId ?? '').trim();
+      const rawMenuName = String(row.menu_name ?? row.menuName ?? '').trim();
+      const ingredientName = String(row.ingredient_name ?? row.ingredientName ?? '').trim();
+      const quantity = Number(row.quantity_per_portion ?? row.quantityPerPortion ?? 0);
+
+      if (!rawMenuId && !rawMenuName) {
+        return;
+      }
+
+      const menuId = rawMenuId || rawMenuName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+      const menuName = rawMenuName || menuId;
+      const normalizedIngredient = ingredientName
+        .toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '');
+
+      const existing = menuMap.get(menuId) || { id: menuId, name: menuName, recipe: {} };
+      if (normalizedIngredient && Number.isFinite(quantity)) {
+        existing.recipe[normalizedIngredient] = (existing.recipe[normalizedIngredient] ?? 0) + quantity;
+      }
+      menuMap.set(menuId, existing);
+    });
+
+    return Array.from(menuMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((menu) => ({
+        ...menu,
+        recipe: Object.fromEntries(Object.entries(menu.recipe).sort(([left], [right]) => left.localeCompare(right))),
+      }));
+  }
+
+  async function handleRecipeUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setRecipeUploadError('');
+    setRecipeUploadMessage('');
+    setRecipeFileName(file.name);
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setRecipeUploadError('Unggah file CSV resep dengan format menu_id,menu_name,ingredient_name,quantity_per_portion,unit.');
+      return;
+    }
+
+    setRecipeUploading(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          const rows = (results.data as Array<Record<string, unknown>>) ?? [];
+          const nextMenus = buildMenusFromRecipeRows(rows);
+
+          if (nextMenus.length === 0) {
+            throw new Error('Tidak ada data resep yang terbaca dari file.');
+          }
+
+          saveMenuList(nextMenus);
+          setMenus(nextMenus);
+          setHasPersonalRecipes(true);
+
+          setStock((currentStock) => {
+            const nextStock = { ...currentStock };
+            nextMenus.forEach((menu) => {
+              Object.keys(menu.recipe).forEach((ingredient) => {
+                if (nextStock[ingredient] === undefined) {
+                  nextStock[ingredient] = '';
+                }
+              });
+            });
+            return nextStock;
+          });
+
+          setRecipeUploadMessage(`Resep berhasil dimuat untuk ${nextMenus.length} menu.`);
+        } catch (error) {
+          console.error('Error parsing recipe CSV:', error);
+          setRecipeUploadError(error instanceof Error ? error.message : 'Gagal memproses file resep.');
+        } finally {
+          setRecipeUploading(false);
+        }
+      },
+      error: () => {
+        setRecipeUploadError('Gagal membaca file CSV. Pastikan format filenya benar.');
+        setRecipeUploading(false);
+      },
+    });
+  }
+
   function recalcStatuses() {
     if (!prediction) {
       setStatuses([]);
@@ -162,6 +263,7 @@ export default function StockPage() {
       await initializeBackendStore();
       const loadedMenus = getMenuList();
       setMenus(loadedMenus);
+      setHasPersonalRecipes(hasPersonalRecipeData());
 
       const savedStock = await loadStockData();
       const allIngredients = new Set<string>();
@@ -251,6 +353,27 @@ export default function StockPage() {
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
         <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Stok & Alert</h1>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Aksi Stok</p>
+          <p className="text-[14px] text-ink-muted">Buka untuk menambah stok atau mencatat pemakaian stok hari ini.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-hairline bg-surface-2 px-[14px] py-2 text-[14px] font-medium text-ink">
+            <span>{recipeUploading ? 'Memproses...' : 'Import Resep CSV'}</span>
+            <input type="file" accept=".csv" className="hidden" onChange={handleRecipeUpload} />
+          </label>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3">
+        <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Resep Personal</p>
+        <p className="text-[14px] text-ink-muted mt-1">Unggah file CSV resep untuk mengisi daftar menu dan bahan yang dipakai khusus akun Anda.</p>
+        {recipeFileName ? <p className="mt-2 text-[13px] text-ink-subtle">File: {recipeFileName}</p> : null}
+        {recipeUploadMessage ? <p className="mt-2 text-[13px] text-primary">{recipeUploadMessage}</p> : null}
+        {recipeUploadError ? <p className="mt-2 text-[13px] text-red-600">{recipeUploadError}</p> : null}
       </div>
 
       <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex items-center justify-between gap-3">
@@ -352,29 +475,35 @@ export default function StockPage() {
         </div>
       </div>
 
-      <div className="mt-6 bg-surface-1 border border-hairline rounded-xl p-6">
-        <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-4">Recipe Mapping</h2>
-        <p className="text-[14px] text-ink-subtle mb-4">Resep ini dihitung berdasarkan prediksi kebutuhan menu untuk hari ini.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {menus.map((menu) => {
-            const rec = prediction?.predictions.find((r) => r.menu_id === menu.id);
-            return (
-              <div key={menu.id} className="bg-surface-2 rounded-lg p-4">
-                <p className="text-[14px] font-medium text-ink mb-2">{menu.name}</p>
-                <p className="text-[12px] text-ink-subtle mb-2">Target: {rec?.predicted_qty ?? '-'} porsi</p>
-                {Object.entries(menu.recipe).map(([ingredient, qty]) => (
-                  <div key={ingredient} className="flex justify-between text-[13px] text-ink-subtle">
-                    <span className="capitalize">{ingredient.replace(/_/g, ' ')}</span>
-                    <span className="font-mono">
-                      {rec ? rec.predicted_qty * qty : qty} {INGREDIENT_UNITS[ingredient] ?? 'unit'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
+      {hasPersonalRecipes ? (
+        <div className="mt-6 bg-surface-1 border border-hairline rounded-xl p-6">
+          <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-4">Recipe Mapping</h2>
+          <p className="text-[14px] text-ink-subtle mb-4">Resep ini dihitung berdasarkan prediksi kebutuhan menu untuk hari ini.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {menus.map((menu) => {
+              const rec = prediction?.predictions.find((r) => r.menu_id === menu.id);
+              return (
+                <div key={menu.id} className="bg-surface-2 rounded-lg p-4">
+                  <p className="text-[14px] font-medium text-ink mb-2">{menu.name}</p>
+                  <p className="text-[12px] text-ink-subtle mb-2">Target: {rec?.predicted_qty ?? '-'} porsi</p>
+                  {Object.entries(menu.recipe).map(([ingredient, qty]) => (
+                    <div key={ingredient} className="flex justify-between text-[13px] text-ink-subtle">
+                      <span className="capitalize">{ingredient.replace(/_/g, ' ')}</span>
+                      <span className="font-mono">
+                        {rec ? rec.predicted_qty * qty : qty} {INGREDIENT_UNITS[ingredient] ?? 'unit'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="mt-6 rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-[14px] text-ink-subtle">
+          Belum ada resep personal yang diunggah. Import file CSV resep terlebih dahulu untuk menampilkan recipe mapping.
+        </div>
+      )}
 
       {activeModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4">

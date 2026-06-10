@@ -17,7 +17,12 @@ const KEYS = {
   schemaVersion: 'ventore_schema_version',
 };
 
+const RECIPE_IMPORT_MARKER = 'ventore_recipe_imported';
+const MODEL_STATUS_KEY = 'ventore_model_training_status';
+
 const CURRENT_SCHEMA_VERSION = '5';
+
+export type ModelTrainingStatus = 'idle' | 'training' | 'ready' | 'error';
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const CONDITIONS: DayCondition[] = ['Normal', 'Normal', 'Normal', 'Ramai', 'Normal', 'Hujan', 'Normal', 'Normal', 'Ramai', 'Normal', 'Normal', 'Normal', 'Normal', 'Normal'];
@@ -237,6 +242,88 @@ function generateSeedWaste(): WasteRecord[] {
   ];
 }
 
+function getCurrentUserId(): string {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  try {
+    const raw = window.localStorage.getItem('ventore-auth-user');
+    if (!raw) {
+      return '';
+    }
+
+    const parsed = JSON.parse(raw) as { user_id?: string };
+    return parsed.user_id ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function notifyModelStatusChanged(status: ModelTrainingStatus): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ventore-model-status-changed', { detail: status }));
+  }
+}
+
+function getUploadCompletedKey(): string {
+  const userId = getCurrentUserId();
+  return userId ? `ventore_sales_upload_completed:${userId}` : 'ventore_sales_upload_completed';
+}
+
+export function getModelTrainingStatus(): ModelTrainingStatus {
+  try {
+    const raw = localStorage.getItem(MODEL_STATUS_KEY);
+    if (raw === 'training' || raw === 'ready' || raw === 'error') {
+      return raw;
+    }
+  } catch {
+    // ignore
+  }
+
+  return 'idle';
+}
+
+export function setModelTrainingStatus(status: ModelTrainingStatus): void {
+  write(MODEL_STATUS_KEY, status);
+  notifyModelStatusChanged(status);
+}
+
+export function isSalesUploadCompleted(): boolean {
+  return getModelTrainingStatus() === 'ready';
+}
+
+export function markModelTrainingInProgress(): void {
+  setModelTrainingStatus('training');
+}
+
+export function markSalesUploadCompleted(): void {
+  setModelTrainingStatus('ready');
+}
+
+export function markModelTrainingError(): void {
+  setModelTrainingStatus('error');
+}
+
+export function resetModelTrainingStatus(): void {
+  setModelTrainingStatus('idle');
+}
+
+export function clearHistoricalData(): void {
+  write(KEYS.sales, []);
+  write(KEYS.waste, []);
+}
+
+function getMenuStorageKey(): string {
+  const userId = getCurrentUserId();
+  return userId ? `${KEYS.menu}:${userId}` : KEYS.menu;
+}
+
+function getRecipeImportMarkerKey(): string {
+  const userId = getCurrentUserId();
+  return userId ? `${RECIPE_IMPORT_MARKER}:${userId}` : RECIPE_IMPORT_MARKER;
+}
+
 function read<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -252,6 +339,33 @@ function write<T>(key: string, value: T): void {
   } catch {
     // storage quota exceeded — silent fail for MVP
   }
+}
+
+function readMenuListData(fallback: MenuItem[] = []): MenuItem[] {
+  try {
+    const scopedKey = getMenuStorageKey();
+    const scopedRaw = localStorage.getItem(scopedKey);
+    if (scopedRaw) {
+      return JSON.parse(scopedRaw) as MenuItem[];
+    }
+
+    const legacyRaw = localStorage.getItem(KEYS.menu);
+    if (legacyRaw) {
+      return JSON.parse(legacyRaw) as MenuItem[];
+    }
+  } catch {
+    // fall back to provided data
+  }
+
+  return fallback;
+}
+
+function writeMenuListData(menus: MenuItem[]): void {
+  write(getMenuStorageKey(), menus);
+}
+
+function markRecipeImport(): void {
+  write(getRecipeImportMarkerKey(), '1');
 }
 
 function isModelMenuList(value: MenuItem[] | null | undefined): boolean {
@@ -277,10 +391,10 @@ function isModelMenuList(value: MenuItem[] | null | undefined): boolean {
 }
 
 function migrateMenuListIfNeeded(): MenuItem[] {
-  const current = read<MenuItem[]>(KEYS.menu, []);
+  const current = readMenuListData([]);
 
   if (!isModelMenuList(current)) {
-    write(KEYS.menu, SEED_MENUS);
+    writeMenuListData(SEED_MENUS);
     localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
     return SEED_MENUS;
   }
@@ -299,9 +413,9 @@ export function initializeIfNeeded(): void {
   }
 
   if (!localStorage.getItem(KEYS.initialized)) {
-    write(KEYS.sales, generateSeedSales());
+    write(KEYS.sales, []);
     write(KEYS.prices, SEED_PRICES);
-    write(KEYS.waste, generateSeedWaste());
+    write(KEYS.waste, []);
     write(KEYS.stock, {});
     localStorage.setItem(KEYS.initialized, '1');
   }
@@ -312,7 +426,16 @@ export function getMenuList(): MenuItem[] {
 }
 
 export function saveMenuList(menus: MenuItem[]): void {
-  write(KEYS.menu, menus);
+  writeMenuListData(menus);
+  markRecipeImport();
+}
+
+export function hasPersonalRecipeData(): boolean {
+  try {
+    return localStorage.getItem(getRecipeImportMarkerKey()) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export function getSalesHistory(): SalesRecord[] {
