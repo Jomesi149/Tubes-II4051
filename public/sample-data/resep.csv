@@ -1,0 +1,53 @@
+menu_id,menu_name,ingredient_name,quantity_per_portion,unit
+nasi_goreng,Nasi Goreng,Beras,200,gram
+nasi_goreng,Nasi Goreng,Telur,1,butir
+nasi_goreng,Nasi Goreng,Minyak Goreng,15,ml
+nasi_goreng,Nasi Goreng,Bawang Putih,5,gram
+nasi_goreng,Nasi Goreng,Kecap Manis,10,ml
+nasi_goreng,Nasi Goreng,Garam,2,gram
+mie_goreng,Mie Goreng Spesial,Mie Instan,1,bungkus
+mie_goreng,Mie Goreng Spesial,Telur,1,butir
+mie_goreng,Mie Goreng Spesial,Sawi,30,gram
+mie_goreng,Mie Goreng Spesial,Kol,20,gram
+mie_goreng,Mie Goreng Spesial,Bawang Putih,5,gram
+mie_goreng,Mie Goreng Spesial,Cabai,3,gram
+soto_ayam,Soto Ayam,Ayam,80,gram
+soto_ayam,Soto Ayam,Bawang Putih,5,gram
+soto_ayam,Soto Ayam,Bawang Merah,5,gram
+soto_ayam,Soto Ayam,Kol,20,gram
+soto_ayam,Soto Ayam,Daun Bawang,5,gram
+soto_ayam,Soto Ayam,Air,300,ml
+soto_ayam,Soto Ayam,Garam,2,gram
+bakso_sapi,Bakso Sapi,Daging Sapi,70,gram
+bakso_sapi,Bakso Sapi,Mie Bihun,50,gram
+bakso_sapi,Bakso Sapi,Bawang Putih,5,gram
+bakso_sapi,Bakso Sapi,Daun Bawang,5,gram
+bakso_sapi,Bakso Sapi,Air,300,ml
+bakso_sapi,Bakso Sapi,Garam,2,gram
+sate_ayam,Sate Ayam,Ayam,100,gram
+sate_ayam,Sate Ayam,Tusuk Sate,1,buah
+sate_ayam,Sate Ayam,Bumbu Kacang,30,gram
+sate_ayam,Sate Ayam,Kecap Manis,10,ml
+sate_ayam,Sate Ayam,Garam,2,gram
+ayam_geprek,Ayam Geprek,Ayam,100,gram
+ayam_geprek,Ayam Geprek,Tepung Terigu,30,gram
+ayam_geprek,Ayam Geprek,Cabai,5,gram
+ayam_geprek,Ayam Geprek,Garam,2,gram
+ayam_geprek,Ayam Geprek,Minyak Goreng,15,ml
+gorengan,Gorengan,Tepung Terigu,50,gram
+gorengan,Gorengan,Minyak Goreng,20,ml
+gorengan,Gorengan,Garam,1,gram
+gorengan,Gorengan,Air,30,ml
+es_teh_manis,Es Teh Manis,Teh Celup,1,sachet
+es_teh_manis,Es Teh Manis,Gula,15,gram
+es_teh_manis,Es Teh Manis,Air,250,ml
+es_teh_manis,Es Teh Manis,Es Batu,50,gram
+es_jeruk,Es Jeruk,Jeruk,1,buah
+es_jeruk,Es Jeruk,Gula,10,gram
+es_jeruk,Es Jeruk,Air,250,ml
+es_jeruk,Es Jeruk,Es Batu,50,gram
+kopi_susu,Kopi Susu,Kopi Bubuk,10,gram
+kopi_susu,Kopi Susu,Susu,50,ml
+kopi_susu,Kopi Susu,Gula,10,gram
+kopi_susu,Kopi Susu,Air,200,ml
+kopi_susu,Kopi Susu,Es Batu,50,gram

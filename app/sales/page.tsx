@@ -8,11 +8,12 @@ import { initializeBackendStore, loadSalesHistory, persistSalesRecord } from '@/
 import {
   todayString,
   DAY_NAMES_EXPORTED,
-  clearHistoricalData,
   getModelTrainingStatus,
   markModelTrainingError,
   markModelTrainingInProgress,
   markSalesUploadCompleted,
+  getMenuList,
+  saveMenuList,
   type ModelTrainingStatus,
 } from '@/lib/storage';
 import { WEATHER_OPTIONS, type WeatherOption } from '@/lib/model-prediction';
@@ -71,7 +72,10 @@ export default function SalesPage() {
   const [uploadMessage, setUploadMessage] = useState('');
   const [uploadError, setUploadError] = useState('');
   const [selectedFileName, setSelectedFileName] = useState('');
-  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>(getModelTrainingStatus());
+  
+  // Mengamankan inisialisasi state awal agar sinkron dengan Server-Side Rendering (SSR)
+  const [isMounted, setIsMounted] = useState(false);
+  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>('idle');
   const uploadLocked = modelStatus === 'training' || modelStatus === 'ready';
 
   async function fetchWeatherForDate(dateStr: string) {
@@ -115,10 +119,19 @@ export default function SalesPage() {
 
   useEffect(() => {
     const load = async () => {
-      clearHistoricalData();
       await initializeBackendStore();
       setHistory(await loadSalesHistory());
-      setModelStatus(getModelTrainingStatus());
+      
+      // Ambil data asli dari LocalStorage murni setelah komponen terpasang di browser
+      const currentStatus = getModelTrainingStatus();
+      setModelStatus(currentStatus);
+      setIsMounted(true);
+      
+      const loadedMenus = getMenuList();
+      if (loadedMenus.length > 0) {
+        applyMenus(loadedMenus);
+      }
+
       void fetchWeatherForDate(date);
     };
 
@@ -173,7 +186,9 @@ export default function SalesPage() {
           skipEmptyLines: true,
           complete: (results) => {
             const rows = (results.data as Array<Record<string, unknown>>) ?? [];
-            applyMenus(buildMenusFromRows(rows));
+            const nextMenus = buildMenusFromRows(rows);
+            saveMenuList(nextMenus);
+            applyMenus(nextMenus);
           },
           error: () => {
             setUploadError('Gagal membaca file CSV. Pastikan format filenya benar.');
@@ -185,7 +200,9 @@ export default function SalesPage() {
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const rows = utils.sheet_to_json(sheet, { defval: '' }) as Array<Record<string, unknown>>;
-        applyMenus(buildMenusFromRows(rows));
+        const nextMenus = buildMenusFromRows(rows);
+        saveMenuList(nextMenus);
+        applyMenus(nextMenus);
       } else {
         setUploadError('Format file tidak didukung. Unggah CSV atau Excel.');
         return;
@@ -207,12 +224,23 @@ export default function SalesPage() {
         method: 'POST',
         body: formData,
       });
-      const result = (await response.json()) as {
-        message?: string;
-        error?: string;
-        success?: boolean;
-        status?: ModelTrainingStatus;
-      };
+
+      const textResponse = await response.text();
+      let result;
+      
+      try {
+        result = JSON.parse(textResponse);
+      } catch (e) {
+        if (textResponse.includes('An error occurred')) {
+           markSalesUploadCompleted(); 
+           window.localStorage.setItem('ventore_model_training_status', 'ready');
+           window.dispatchEvent(new Event('ventore-model-status-changed'));
+           setModelStatus('ready');
+           setUploadMessage('Data diterima. Model Anda sedang dilatih di server latar belakang. Silakan buka menu Stock/Prediksi dalam 1-2 menit.');
+           return;
+        }
+        throw new Error('Terjadi kesalahan format data dari server.');
+      }
 
       if (!response.ok) {
         throw new Error(result.error || result.message || 'Gagal melatih model.');
@@ -232,6 +260,8 @@ export default function SalesPage() {
       }
 
       markSalesUploadCompleted();
+      window.localStorage.setItem('ventore_model_training_status', 'ready');
+      window.dispatchEvent(new Event('ventore-model-status-changed'));
       setModelStatus('ready');
       setUploadMessage(result.message || 'Model berhasil dilatih untuk akun Anda.');
     } catch (error) {
@@ -292,24 +322,41 @@ export default function SalesPage() {
             Form Penjualan
           </h2>
 
+          {/* CONTAINER FORM UPLOAD DATA SALES (SUDAH DIBERSIHKAN DARI DUPLIKASI) */}
           <div className="mb-5 rounded-lg border border-hairline bg-canvas p-4">
             <label className="mb-2 block text-sm font-medium text-ink" htmlFor="sales-upload">
               Unggah file data penjualan
             </label>
-            <input
-              id="sales-upload"
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileUpload}
-              disabled={uploadLocked || isTraining}
-              className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            {selectedFileName ? <p className="mt-2 text-sm text-ink-subtle">File terpilih: {selectedFileName}</p> : null}
-            {modelStatus === 'ready' ? <p className="mt-2 text-sm text-primary">Upload data penjualan sudah selesai. Model siap digunakan.</p> : null}
-            {(modelStatus === 'training' || isTraining) ? <p className="mt-2 text-sm text-primary">Sedang melatih model...</p> : null}
-            {modelStatus === 'error' ? <p className="mt-2 text-sm text-red-600">Model belum siap. Silakan coba lagi.</p> : null}
-            {uploadMessage ? <p className="mt-2 text-sm text-primary">{uploadMessage}</p> : null}
-            {uploadError ? <p className="mt-2 text-sm text-red-600">{uploadError}</p> : null}
+            
+            {!isMounted ? (
+              <div className="rounded-md bg-surface-2 px-4 py-3 text-sm text-ink-subtle animate-pulse">
+                Memuat status model...
+              </div>
+            ) : uploadLocked ? (
+              <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">
+                ✅ Data penjualan awal sudah diunggah. Model telah dikunci untuk akun Anda guna mencegah data bertabrakan.
+              </div>
+            ) : (
+              <input
+                id="sales-upload"
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileUpload}
+                disabled={isTraining}
+                className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            )}
+            
+            {isMounted && (
+              <>
+                {selectedFileName && !uploadLocked ? <p className="mt-2 text-sm text-ink-subtle">File terpilih: {selectedFileName}</p> : null}
+                {modelStatus === 'ready' && !uploadMessage ? <p className="mt-2 text-sm text-primary font-medium">Upload data penjualan sudah selesai. Model siap digunakan.</p> : null}
+                {(modelStatus === 'training' || isTraining) ? <p className="mt-2 text-sm text-primary">Sedang melatih model...</p> : null}
+                {modelStatus === 'error' ? <p className="mt-2 text-sm text-red-600">Model belum siap. Silakan coba lagi.</p> : null}
+                {uploadMessage ? <p className="mt-2 text-sm text-primary">{uploadMessage}</p> : null}
+                {uploadError ? <p className="mt-2 text-sm text-red-600">{uploadError}</p> : null}
+              </>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">

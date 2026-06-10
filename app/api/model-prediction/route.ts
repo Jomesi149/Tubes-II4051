@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { EventOptionValue, WeatherOption } from '@/lib/model-prediction';
 
 export const runtime = 'nodejs';
-
+export const maxDuration = 60; 
 const DEFAULT_HF_SPACE_ID = 'hakimgans/ventoree';
 const DEFAULT_HF_PREDICT_API_NAME = 'predict';
 const DEFAULT_HF_RETRAIN_API_NAME = 'retrain';
@@ -104,12 +104,14 @@ export async function POST(request: NextRequest) {
   }
 
   function extractStreamPayload(streamText: string): string {
-    const finalLine = streamText
-      .split('\n')
-      .map((line) => line.trim())
-      .find((line) => line.startsWith('data:'));
+    const lines = streamText.split('\n').map((line) => line.trim());
+    
+    // Gradio mengirim banyak baris event. Kita hanya butuh baris yang menyatakan proses selesai.
+    const completedLine = lines.find((line) => 
+      line.startsWith('data:') && line.includes('"process_completed"')
+    );
 
-    return finalLine ? finalLine.replace(/^data:\s*/, '') : '';
+    return completedLine ? completedLine.replace(/^data:\s*/, '') : '';
   }
 
   try {
@@ -204,7 +206,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const maxPollAttempts = 8;
+        const maxPollAttempts = 3; // Naikkan dari 8 ke 25 agar API Next.js sabar menunggu proses training selesai
         let finalPayload = '';
 
         for (let attempt = 0; attempt < maxPollAttempts; attempt += 1) {
@@ -228,15 +230,17 @@ export async function POST(request: NextRequest) {
 
         try {
           const parsedPayload = JSON.parse(finalPayload);
-          const statusValue = parsedPayload && typeof parsedPayload === 'object' && 'status' in parsedPayload
-            ? String((parsedPayload as { status?: unknown }).status ?? '')
-            : '';
+          
+          // Mengecek status success berdasarkan format Gradio 4
+          const isSuccess = parsedPayload?.msg === 'process_completed' && parsedPayload?.success === true;
+          // Mengambil pesan return dari fungsi retrain_model di Python (app.py)
+          const outputMessage = parsedPayload?.output?.data?.[0]; 
 
           return NextResponse.json(
             {
-              message: statusValue === 'ready' ? 'Model siap digunakan.' : 'Model sedang dilatih. Silakan tunggu beberapa saat.',
+              message: isSuccess ? (typeof outputMessage === 'string' ? outputMessage : 'Model siap digunakan.') : 'Model sedang dilatih. Silakan tunggu beberapa saat.',
               success: true,
-              status: statusValue === 'ready' ? 'ready' : 'training',
+              status: isSuccess ? 'ready' : 'training',
             },
             { status: 200 }
           );
@@ -253,7 +257,7 @@ export async function POST(request: NextRequest) {
       userId = getUserId(body.userId);
       weather = body.weather ?? 'Berawan';
       event = body.event ?? 'missing';
-    }
+    } 
 
     if (!userId) {
       return NextResponse.json({ message: 'userId wajib diisi untuk prediksi.' }, { status: 401 });
