@@ -324,9 +324,16 @@ function getRecipeImportMarkerKey(): string {
   return userId ? `${RECIPE_IMPORT_MARKER}:${userId}` : RECIPE_IMPORT_MARKER;
 }
 
+// Fungsi pembantu baru untuk menyisipkan userId ke semua kunci penyimpanan otomatis
+function getScopedKey(key: string): string {
+  const userId = getCurrentUserId();
+  return userId ? `${key}:${userId}` : key;
+}
+
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const scopedKey = getScopedKey(key);
+    const raw = localStorage.getItem(scopedKey);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -335,7 +342,9 @@ function read<T>(key: string, fallback: T): T {
 
 function write<T>(key: string, value: T): void {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    // PERBAIKAN: Tulis data ke tempat penampungan khusus user tersebut
+    const scopedKey = getScopedKey(key);
+    localStorage.setItem(scopedKey, JSON.stringify(value));
   } catch {
     // storage quota exceeded — silent fail for MVP
   }
@@ -393,7 +402,8 @@ function isModelMenuList(value: MenuItem[] | null | undefined): boolean {
 function migrateMenuListIfNeeded(): MenuItem[] {
   const current = readMenuListData([]);
 
-  if (!isModelMenuList(current)) {
+  // PERBAIKAN CRITICAL: Hanya seed jika data kosong, JANGAN hapus resep buatan user!
+  if (!current || current.length === 0) {
     writeMenuListData(SEED_MENUS);
     localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
     return SEED_MENUS;

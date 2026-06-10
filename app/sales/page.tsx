@@ -122,21 +122,30 @@ export default function SalesPage() {
       await initializeBackendStore();
       setHistory(await loadSalesHistory());
       
-      // Ambil data asli dari LocalStorage murni setelah komponen terpasang di browser
       const currentStatus = getModelTrainingStatus();
       setModelStatus(currentStatus);
       setIsMounted(true);
       
-      const loadedMenus = getMenuList();
-      if (loadedMenus.length > 0) {
-        applyMenus(loadedMenus);
+      // PERBAIKAN: Hanya muat menu jika user terbukti sudah mengunggah file CSV jualan (status ready)
+      if (currentStatus === 'ready') {
+        const loadedMenus = getMenuList();
+        if (loadedMenus.length > 0) {
+          applyMenus(loadedMenus);
+        }
+      } else {
+        setMenus([]); // Kosongkan total jika belum ada CSV yang masuk
       }
 
       void fetchWeatherForDate(date);
     };
 
     const handleStatusChange = () => {
-      setModelStatus(getModelTrainingStatus());
+      const nextStatus = getModelTrainingStatus();
+      setModelStatus(nextStatus);
+      if (nextStatus === 'ready') {
+        const loadedMenus = getMenuList();
+        if (loadedMenus.length > 0) applyMenus(loadedMenus);
+      }
     };
 
     void load();
@@ -322,7 +331,6 @@ export default function SalesPage() {
             Form Penjualan
           </h2>
 
-          {/* CONTAINER FORM UPLOAD DATA SALES (SUDAH DIBERSIHKAN DARI DUPLIKASI) */}
           <div className="mb-5 rounded-lg border border-hairline bg-canvas p-4">
             <label className="mb-2 block text-sm font-medium text-ink" htmlFor="sales-upload">
               Unggah file data penjualan

@@ -159,25 +159,6 @@ export default function StockUsagePage() {
           {saved ? '✓ Pemakaian Tersimpan' : 'Simpan Pemakaian Stok'}
         </button>
       </div>
-
-      <div className="mt-6 bg-surface-1 border border-hairline rounded-xl p-6">
-        <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-4">Menu yang Dipengaruhi</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {menus.map((menu) => (
-            <div key={menu.id} className="bg-surface-2 rounded-lg p-4">
-              <p className="text-[14px] font-medium text-ink mb-2">{menu.name}</p>
-              {Object.entries(menu.recipe).map(([ingredient, qty]) => (
-                <div key={ingredient} className="flex justify-between text-[13px] text-ink-subtle">
-                  <span className="capitalize">{ingredient.replace(/_/g, ' ')}</span>
-                  <span className="font-mono">
-                    {qty} {ingredientUnits[ingredient] ?? 'unit'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

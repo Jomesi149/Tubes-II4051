@@ -1,625 +1,256 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
-import { initializeBackendStore, loadStockData, persistStockData } from '@/lib/backend-store';
-import { getMenuList, hasPersonalRecipeData, saveMenuList, todayString } from '@/lib/storage';
-import { requestModelPrediction } from '@/lib/model-service';
-import { type EventOptionValue, type ModelPredictionResponse, type WeatherOption } from '@/lib/model-prediction';
-import type { MenuItem } from '@/lib/types';
+import { read, utils } from 'xlsx';
+import Link from 'next/link';
+import {
+  getMenuList,
+  saveMenuList,
+  getStockData,
+  saveStockData,
+} from '@/lib/storage';
+import type { MenuItem, StockData } from '@/lib/types';
 
-type IngredientStatus = {
-  name: string;
-  required: number;
-  available: number;
-  unit: string;
-  status: 'aman' | 'kritis';
-};
-
-type ModalMode = 'add' | 'usage' | null;
-
-const INGREDIENT_UNITS: Record<string, string> = {
-  beras: 'gram',
-  telur: 'butir',
-  minyak_goreng: 'ml',
-  bawang_putih: 'gram',
-  kecap_manis: 'ml',
-  garam: 'gram',
-  mie_instan: 'bungkus',
-  sawi: 'gram',
-  kol: 'gram',
-  cabai: 'gram',
-  ayam: 'gram',
-  bawang_merah: 'gram',
-  daun_bawang: 'gram',
-  gula: 'gram',
-  air: 'ml',
-  daging_sapi: 'gram',
-  mie_bihun: 'gram',
-  tusuk_sate: 'buah',
-  bumbu_kacang: 'gram',
-  tepung_terigu: 'gram',
-  teh_celup: 'sachet',
-  es_batu: 'gram',
-  jeruk: 'buah',
-  kopi_bubuk: 'gram',
-  susu: 'ml',
-};
+function getCurrentUserId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = window.localStorage.getItem('ventore-auth-user');
+    if (!raw) return '';
+    const parsed = JSON.parse(raw) as { user_id?: string };
+    return parsed.user_id ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export default function StockPage() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
-  const [prediction, setPrediction] = useState<ModelPredictionResponse | null>(null);
-  const [stock, setStock] = useState<Record<string, string>>({});
-  const [statuses, setStatuses] = useState<IngredientStatus[]>([]);
-  const [weatherLoading, setWeatherLoading] = useState(false);
-  const [weatherError, setWeatherError] = useState('');
-  const [activeModal, setActiveModal] = useState<ModalMode>(null);
-  const [addAmounts, setAddAmounts] = useState<Record<string, string>>({});
-  const [usageAmounts, setUsageAmounts] = useState<Record<string, string>>({});
-  const [modalError, setModalError] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [recipeUploadMessage, setRecipeUploadMessage] = useState('');
-  const [recipeUploadError, setRecipeUploadError] = useState('');
-  const [recipeUploading, setRecipeUploading] = useState(false);
-  const [recipeFileName, setRecipeFileName] = useState('');
-  const [hasPersonalRecipes, setHasPersonalRecipes] = useState(false);
+  const [stock, setStock] = useState<StockData>({});
+  const [isMounted, setIsMounted] = useState(false);
+  const [recipeLocked, setRecipeLocked] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadMessage, setUploadMessage] = useState('');
 
-  const stockIngredients = useMemo(() => Object.keys(stock), [stock]);
+  const loadStockRecords = () => {
+    const currentMenus = getMenuList();
+    const currentStock = getStockData();
 
-  const requiredIngredients = useMemo(() => {
-    const required: Record<string, number> = {};
-    if (!prediction) return required;
+    setMenus(currentMenus);
+    setStock(currentStock);
 
-    prediction.predictions.forEach((predictionItem) => {
-      const menu = menus.find((item) => item.id === predictionItem.menu_id);
-      if (!menu) return;
-
-      Object.entries(menu.recipe).forEach(([ingredient, quantityPerPortion]) => {
-        required[ingredient] = (required[ingredient] ?? 0) + predictionItem.predicted_qty * quantityPerPortion;
-      });
-    });
-
-    return required;
-  }, [prediction, menus]);
-
-  async function fetchTodayPrediction() {
-    try {
-      setWeatherLoading(true);
-      setWeatherError('');
-
-      const today = todayString();
-      const response = await fetch(
-        'https://api.openweathermap.org/data/2.5/forecast?lat=-6.9175&lon=107.6191&appid=717b64c259b63d6656a8032709d0a797&units=metric'
-      );
-      const data = await response.json();
-      const forecasts = (data.list ?? []).filter((forecast: { dt_txt: string }) => forecast.dt_txt.startsWith(today));
-
-      let weather: WeatherOption = 'Berawan';
-      if (forecasts.length > 0) {
-        const forecast = forecasts[0];
-        const weatherMain = forecast.weather?.[0]?.main;
-        const weatherId = forecast.weather?.[0]?.id;
-        if (weatherMain === 'Clear' || weatherId === 800) {
-          weather = 'Cerah';
-        } else if (weatherMain === 'Clouds' || (weatherId >= 801 && weatherId <= 804)) {
-          weather = 'Berawan';
-        } else {
-          weather = 'Hujan';
-        }
-      }
-
-      const dateObj = new Date(today);
-      const event: EventOptionValue =
-        dateObj.getDate() === 1
-          ? 'Promo Awal Bulan'
-          : dateObj.getDay() === 5
-            ? 'Promo Jumat Berkah'
-            : 'missing';
-
-      const modelData = await requestModelPrediction({ weather, event });
-      setPrediction(modelData);
-    } catch (error) {
-      console.error('Error fetching today prediction for stock page:', error);
-      setWeatherError('Gagal mengambil prediksi hari ini, gunakan data stok tetap.');
-      setPrediction(null);
-    } finally {
-      setWeatherLoading(false);
-    }
-  }
-
-  function buildMenusFromRecipeRows(rows: Array<Record<string, unknown>>): MenuItem[] {
-    const menuMap = new Map<string, { id: string; name: string; recipe: Record<string, number> }>();
-
-    rows.forEach((row) => {
-      const rawMenuId = String(row.menu_id ?? row.menuId ?? '').trim();
-      const rawMenuName = String(row.menu_name ?? row.menuName ?? '').trim();
-      const ingredientName = String(row.ingredient_name ?? row.ingredientName ?? '').trim();
-      const quantity = Number(row.quantity_per_portion ?? row.quantityPerPortion ?? 0);
-
-      if (!rawMenuId && !rawMenuName) {
-        return;
-      }
-
-      const menuId = rawMenuId || rawMenuName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
-      const menuName = rawMenuName || menuId;
-      const normalizedIngredient = ingredientName
-        .toLowerCase()
-        .replace(/\s+/g, '_')
-        .replace(/[^a-z0-9_]/g, '');
-
-      const existing = menuMap.get(menuId) || { id: menuId, name: menuName, recipe: {} };
-      if (normalizedIngredient && Number.isFinite(quantity)) {
-        existing.recipe[normalizedIngredient] = (existing.recipe[normalizedIngredient] ?? 0) + quantity;
-      }
-      menuMap.set(menuId, existing);
-    });
-
-    return Array.from(menuMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((menu) => ({
-        ...menu,
-        recipe: Object.fromEntries(Object.entries(menu.recipe).sort(([left], [right]) => left.localeCompare(right))),
-      }));
-  }
-
-  async function handleRecipeUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    setRecipeUploadError('');
-    setRecipeUploadMessage('');
-    setRecipeFileName(file.name);
-
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setRecipeUploadError('Unggah file CSV resep dengan format menu_id,menu_name,ingredient_name,quantity_per_portion,unit.');
-      return;
-    }
-
-    setRecipeUploading(true);
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        try {
-          const rows = (results.data as Array<Record<string, unknown>>) ?? [];
-          const nextMenus = buildMenusFromRecipeRows(rows);
-
-          if (nextMenus.length === 0) {
-            throw new Error('Tidak ada data resep yang terbaca dari file.');
-          }
-
-          saveMenuList(nextMenus);
-          setMenus(nextMenus);
-          setHasPersonalRecipes(true);
-
-          setStock((currentStock) => {
-            const nextStock = { ...currentStock };
-            nextMenus.forEach((menu) => {
-              Object.keys(menu.recipe).forEach((ingredient) => {
-                if (nextStock[ingredient] === undefined) {
-                  nextStock[ingredient] = '';
-                }
-              });
-            });
-            return nextStock;
-          });
-
-          setRecipeUploadMessage(`Resep berhasil dimuat untuk ${nextMenus.length} menu.`);
-        } catch (error) {
-          console.error('Error parsing recipe CSV:', error);
-          setRecipeUploadError(error instanceof Error ? error.message : 'Gagal memproses file resep.');
-        } finally {
-          setRecipeUploading(false);
-        }
-      },
-      error: () => {
-        setRecipeUploadError('Gagal membaca file CSV. Pastikan format filenya benar.');
-        setRecipeUploading(false);
-      },
-    });
-  }
-
-  function recalcStatuses() {
-    if (!prediction) {
-      setStatuses([]);
-      return;
-    }
-
-    const required: Record<string, number> = {};
-    for (const rec of prediction.predictions) {
-      const menu = menus.find((m) => m.id === rec.menu_id);
-      if (!menu) continue;
-      for (const [ing, perPortion] of Object.entries(menu.recipe)) {
-        required[ing] = (required[ing] ?? 0) + rec.predicted_qty * perPortion;
-      }
-    }
-
-    const result: IngredientStatus[] = Object.entries(required).map(([ing, req]) => {
-      const available = parseFloat(stock[ing] || '0') || 0;
-      return {
-        name: ing,
-        required: Math.ceil(req),
-        available,
-        unit: INGREDIENT_UNITS[ing] ?? 'unit',
-        status: available >= req ? 'aman' : 'kritis',
-      };
-    });
-
-    result.sort((a, b) => {
-      if (a.status === 'kritis' && b.status !== 'kritis') return -1;
-      if (a.status !== 'kritis' && b.status === 'kritis') return 1;
-      return a.name.localeCompare(b.name);
-    });
-
-    setStatuses(result);
-  }
+    // Mengunci status upload secara presisi berbasis localStorage akun user
+    const userId = getCurrentUserId();
+    const lockKey = userId ? `ventore_recipe_locked:${userId}` : 'ventore_recipe_locked';
+    setRecipeLocked(window.localStorage.getItem(lockKey) === 'true');
+  };
 
   useEffect(() => {
-    const load = async () => {
-      await initializeBackendStore();
-      const loadedMenus = getMenuList();
-      setMenus(loadedMenus);
-      setHasPersonalRecipes(hasPersonalRecipeData());
-
-      const savedStock = await loadStockData();
-      const allIngredients = new Set<string>();
-      loadedMenus.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
-
-      const initialStock: Record<string, string> = {};
-      allIngredients.forEach((ingredient) => {
-        initialStock[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
-      });
-
-      setStock(initialStock);
-      void fetchTodayPrediction();
-    };
-
-    void load();
+    loadStockRecords();
+    setIsMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (menus.length === 0) return;
-    recalcStatuses();
-  }, [prediction, stock, menus]);
+  const handleRecipeUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  function openAddModal() {
-    setModalError('');
-    const nextValues: Record<string, string> = {};
-    stockIngredients.forEach((ingredient) => {
-      nextValues[ingredient] = '0';
+    setUploadError('');
+    setUploadMessage('');
+
+    const userId = getCurrentUserId();
+    const lockKey = userId ? `ventore_recipe_locked:${userId}` : 'ventore_recipe_locked';
+
+    if (window.localStorage.getItem(lockKey) === 'true') {
+      setUploadError('Struktur resep sudah diunggah Caps lock.');
+      return;
+    }
+
+    if (!userId) {
+      setUploadError('Silakan login dulu agar resep dipasang untuk akun Anda.');
+      return;
+    }
+
+    try {
+      const processRows = (rows: Array<Record<string, unknown>>) => {
+        const currentMenus = getMenuList();
+        const recipeMap = new Map<string, Record<string, number>>();
+
+        rows.forEach((row) => {
+          const menuId = String(row.menu_id ?? row.menuId ?? '').trim();
+          const ingredient = String(row.ingredient_name ?? row.ingredientName ?? '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_]+/g, '_');
+          const qty = parseFloat(String(row.quantity_per_portion ?? row.quantityPerPortion ?? '0')) || 0;
+
+          if (menuId && ingredient) {
+            if (!recipeMap.has(menuId)) {
+              recipeMap.set(menuId, {});
+            }
+            recipeMap.get(menuId)![ingredient] = qty;
+          }
+        });
+
+        const updatedMenus = currentMenus.map((menu) => ({
+          ...menu,
+          recipe: recipeMap.get(menu.id) || {},
+        }));
+
+        saveMenuList(updatedMenus);
+        window.localStorage.setItem(lockKey, 'true');
+        
+        loadStockRecords();
+        setUploadMessage('Struktur resep personal (BOM) berhasil disimpan dan dikunci.');
+      };
+
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const rows = (results.data as Array<Record<string, unknown>>) ?? [];
+            processRows(rows);
+          },
+          error: () => setUploadError('Gagal membaca file CSV resep.'),
+        });
+      } else if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = read(arrayBuffer, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = utils.sheet_to_json(sheet, { defval: '' }) as Array<Record<string, unknown>>;
+        processRows(rows);
+      } else {
+        setUploadError('Format file tidak didukung. Harap unggah file CSV atau Excel.');
+      }
+    } catch (error) {
+      console.error('Error uploading recipe:', error);
+      setUploadError('Terjadi kesalahan saat memproses data resep.');
+    }
+  };
+
+  const getActiveIngredients = () => {
+    const ingredientsSet = new Set<string>();
+    menus.forEach((menu) => {
+      if (menu.recipe) {
+        Object.keys(menu.recipe).forEach((ing) => {
+          if (ing) ingredientsSet.add(ing);
+        });
+      }
     });
-    setAddAmounts(nextValues);
-    setActiveModal('add');
-  }
+    return Array.from(ingredientsSet).sort();
+  };
 
-  function openUsageModal() {
-    setModalError('');
-    const nextValues: Record<string, string> = {};
-    stockIngredients.forEach((ingredient) => {
-      nextValues[ingredient] = String(requiredIngredients[ingredient] ?? 0);
-    });
-    setUsageAmounts(nextValues);
-    setActiveModal('usage');
-  }
-
-  function closeModal() {
-    setActiveModal(null);
-    setModalError('');
-  }
-
-  function saveAddedStock() {
-    const nextStock: Record<string, number> = {};
-
-    stockIngredients.forEach((ingredient) => {
-      const current = parseFloat(stock[ingredient] || '0') || 0;
-      const added = parseFloat(addAmounts[ingredient] || '0') || 0;
-      nextStock[ingredient] = current + added;
-    });
-
-    void persistStockData(nextStock);
-    setStock(
-      Object.fromEntries(Object.entries(nextStock).map(([ingredient, value]) => [ingredient, String(value)]))
-    );
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-    closeModal();
-  }
-
-  function saveUsedStock() {
-    const nextStock: Record<string, number> = {};
-
-    stockIngredients.forEach((ingredient) => {
-      const current = parseFloat(stock[ingredient] || '0') || 0;
-      const used = parseFloat(usageAmounts[ingredient] || '0') || 0;
-      nextStock[ingredient] = Math.max(0, current - used);
-    });
-
-    void persistStockData(nextStock);
-    setStock(
-      Object.fromEntries(Object.entries(nextStock).map(([ingredient, value]) => [ingredient, String(value)]))
-    );
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-    closeModal();
-  }
-
-  const criticalCount = statuses.filter((s) => s.status === 'kritis').length;
+  const activeIngredients = getActiveIngredients();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
-      <div className="mb-8">
-        <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Stok & Alert</h1>
-      </div>
-
-      <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      {/* HEADER PAGE DAN TOMBOL MONITORING INPUT/USAGE */}
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Aksi Stok</p>
-          <p className="text-[14px] text-ink-muted">Buka untuk menambah stok atau mencatat pemakaian stok hari ini.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 justify-end">
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-hairline bg-surface-2 px-[14px] py-2 text-[14px] font-medium text-ink">
-            <span>{recipeUploading ? 'Memproses...' : 'Import Resep CSV'}</span>
-            <input type="file" accept=".csv" className="hidden" onChange={handleRecipeUpload} />
-          </label>
-        </div>
-      </div>
-
-      <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3">
-        <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Resep Personal</p>
-        <p className="text-[14px] text-ink-muted mt-1">Unggah file CSV resep untuk mengisi daftar menu dan bahan yang dipakai khusus akun Anda.</p>
-        {recipeFileName ? <p className="mt-2 text-[13px] text-ink-subtle">File: {recipeFileName}</p> : null}
-        {recipeUploadMessage ? <p className="mt-2 text-[13px] text-primary">{recipeUploadMessage}</p> : null}
-        {recipeUploadError ? <p className="mt-2 text-[13px] text-red-600">{recipeUploadError}</p> : null}
-      </div>
-
-      <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Aksi Stok</p>
-          <p className="text-[14px] text-ink-muted">Buka untuk menambah stok atau mencatat pemakaian stok hari ini.</p>
-        </div>
-        <div className="flex flex-wrap gap-2 justify-end">
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors"
-          >
-            Input Penambahan Stok
-          </button>
-          <button
-            type="button"
-            onClick={openUsageModal}
-            className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-surface-1 border border-hairline text-ink hover:bg-surface-2 transition-colors"
-          >
-            Input Stok Terpakai
-          </button>
-        </div>
-      </div>
-
-      <div className="mb-6 rounded-lg border border-hairline bg-surface-1 px-4 py-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[13px] font-medium text-ink-subtle uppercase tracking-[0.4px]">Prediksi Hari Ini</p>
-          <p className="text-[16px] font-medium text-ink">
-            {prediction ? `${prediction.weather} · ${prediction.event_label}` : weatherLoading ? 'Memuat...' : 'Tidak tersedia'}
+          <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">
+            Manajemen Stok Bahan Baku
+          </h1>
+          <p className="mt-2 text-sm text-ink-subtle">
+            Memonitor jumlah ketersediaan unit persediaan gudang rill dari resep makanan toko Anda.
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-[13px] text-ink-subtle">Total Kebutuhan</p>
-          <p className="text-[20px] font-semibold text-ink">{prediction ? prediction.total_qty : 0} porsi</p>
+        
+        <div className="flex items-center gap-3">
+          <Link
+            href="/stock/input"
+            className="px-[14px] py-2 rounded-md text-[14px] font-medium border border-hairline bg-surface-1 text-ink hover:bg-canvas transition-colors"
+          >
+            + Input Masuk Stok
+          </Link>
+          <Link
+            href="/stock/usage"
+            className="px-[14px] py-2 rounded-md text-[14px] font-medium border border-hairline bg-surface-1 text-ink hover:bg-canvas transition-colors"
+          >
+            Log Penggunaan Stok
+          </Link>
         </div>
       </div>
 
-      {weatherError && (
-        <div className="mb-6 rounded-lg border border-[#e5484d]/20 bg-[#e5484d]/10 px-4 py-3 text-[14px] text-[#ffb8bb]">
-          {weatherError}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-6">
+      <div className="space-y-6">
+        {/* MODUL UPLOAD RESEP */}
         <div className="bg-surface-1 border border-hairline rounded-xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px]">Status Ketersediaan</h2>
-            {criticalCount > 0 ? (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium bg-[#e5484d]/15 text-[#e5484d] border border-[#e5484d]/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e5484d] inline-block" />
-                {criticalCount} bahan kritis
-              </span>
-            ) : statuses.length > 0 ? (
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium bg-success/15 text-success border border-success/20">
-                <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
-                Semua aman
-              </span>
-            ) : null}
-          </div>
+          <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-4">
+            Struktur Resep Personal (BOM)
+          </h2>
+          
+          <div className="rounded-lg border border-hairline bg-canvas p-4 max-w-xl">
+            <label className="mb-2 block text-sm font-medium text-ink" htmlFor="recipe-upload">
+              Unggah file CSV/Excel resep porsi makanan
+            </label>
 
-          {statuses.length === 0 ? (
-            <p className="text-[14px] text-ink-subtle">Masukkan stok fisik untuk melihat status ketersediaan bahan hari ini.</p>
+            {!isMounted ? (
+              <div className="rounded-md bg-surface-2 px-4 py-3 text-sm text-ink-subtle animate-pulse">
+                Memuat status gembok...
+              </div>
+            ) : recipeLocked ? (
+              <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">
+                ✅ Struktur resep (BOM) toko Anda telah berhasil diunggah dan dikunci demi keamanan data integritas.
+              </div>
+            ) : (
+              <input
+                id="recipe-upload"
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                onChange={handleRecipeUpload}
+                className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white"
+              />
+            )}
+            
+            {uploadMessage && <p className="mt-2 text-sm text-primary font-medium">{uploadMessage}</p>}
+            {uploadError && <p className="mt-2 text-sm text-red-600 font-medium">{uploadError}</p>}
+          </div>
+        </div>
+
+        {/* TABEL STOK MURNI (TANPA HARGA/ASET RUPIAH) */}
+        <div className="bg-surface-1 border border-hairline rounded-xl p-6">
+          <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-6">
+            Daftar Persediaan Gudang
+          </h2>
+
+          {!isMounted ? (
+            <p className="text-sm text-ink-subtle">Memuat inventaris...</p>
+          ) : !recipeLocked || activeIngredients.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-hairline bg-canvas px-4 py-10 text-center text-sm text-ink-subtle">
+              ⚠️ Silakan unggah struktur resep personal (BOM) toko Anda pada modul di atas untuk mengaktifkan pelacakan tabel bahan baku secara otomatis.
+            </div>
           ) : (
-            <div className="space-y-0">
-              {statuses.map((s, i) => (
-                <div key={s.name} className={`py-3.5 ${i < statuses.length - 1 ? 'border-b border-hairline' : ''}`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[14px] font-medium text-ink capitalize">{s.name.replace(/_/g, ' ')}</p>
-                      <p className="text-[13px] text-ink-subtle mt-0.5">
-                        Dibutuhkan: {s.required} {s.unit} · Tersedia: {s.available} {s.unit}
-                      </p>
-                    </div>
-                    {s.status === 'kritis' ? (
-                      <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-[#e5484d]/15 text-[#e5484d] border border-[#e5484d]/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#e5484d]" />
-                        Kritis
-                      </span>
-                    ) : (
-                      <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-success/15 text-success border border-success/20">
-                        <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                        Aman
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 h-1 bg-surface-3 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${s.status === 'kritis' ? 'bg-[#e5484d]' : 'bg-success'}`}
-                      style={{
-                        width: `${Math.min(100, s.required > 0 ? (s.available / s.required) * 100 : 100)}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-hairline text-[14px] font-medium text-ink-muted bg-canvas">
+                    <th className="py-3 px-4">Nama Bahan Baku</th>
+                    <th className="py-3 px-4">Stok Saat Ini</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeIngredients.map((ingredient) => {
+                    const currentStock = stock[ingredient] || 0;
+                    
+                    const displayName = ingredient
+                      .replace(/_/g, ' ')
+                      .replace(/\b\w/g, (char) => char.toUpperCase());
+
+                    return (
+                      <tr key={ingredient} className="border-b border-hairline hover:bg-canvas transition-colors text-[15px] text-ink">
+                        <td className="py-3 px-4 font-medium">{displayName}</td>
+                        <td className="py-3 px-4 font-mono font-semibold text-primary">
+                          {currentStock.toLocaleString('id-ID')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
       </div>
-
-      {hasPersonalRecipes ? (
-        <div className="mt-6 bg-surface-1 border border-hairline rounded-xl p-6">
-          <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-4">Recipe Mapping</h2>
-          <p className="text-[14px] text-ink-subtle mb-4">Resep ini dihitung berdasarkan prediksi kebutuhan menu untuk hari ini.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {menus.map((menu) => {
-              const rec = prediction?.predictions.find((r) => r.menu_id === menu.id);
-              return (
-                <div key={menu.id} className="bg-surface-2 rounded-lg p-4">
-                  <p className="text-[14px] font-medium text-ink mb-2">{menu.name}</p>
-                  <p className="text-[12px] text-ink-subtle mb-2">Target: {rec?.predicted_qty ?? '-'} porsi</p>
-                  {Object.entries(menu.recipe).map(([ingredient, qty]) => (
-                    <div key={ingredient} className="flex justify-between text-[13px] text-ink-subtle">
-                      <span className="capitalize">{ingredient.replace(/_/g, ' ')}</span>
-                      <span className="font-mono">
-                        {rec ? rec.predicted_qty * qty : qty} {INGREDIENT_UNITS[ingredient] ?? 'unit'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-6 rounded-xl border border-dashed border-hairline bg-surface-1 p-6 text-[14px] text-ink-subtle">
-          Belum ada resep personal yang diunggah. Import file CSV resep terlebih dahulu untuk menampilkan recipe mapping.
-        </div>
-      )}
-
-      {activeModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] flex items-center justify-center p-4">
-          <div className="w-full max-w-5xl max-h-[90vh] overflow-auto rounded-2xl border border-hairline bg-surface-1 p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <h3 className="text-[22px] font-semibold text-ink tracking-[-0.4px]">
-                  {activeModal === 'add' ? 'Input Penambahan Stok' : 'Input Stok Terpakai'}
-                </h3>
-                <p className="text-[14px] text-ink-muted mt-1">
-                  {activeModal === 'add'
-                    ? 'Masukkan stok yang masuk hari ini. Nilai akan ditambahkan ke stok tersimpan.'
-                    : 'Default pemakaian diisi dari prediksi model hari ini. Silakan ubah sesuai kondisi manual.'}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="w-9 h-9 rounded-full border border-hairline text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
-                aria-label="Tutup popup"
-              >
-                ×
-              </button>
-            </div>
-
-            {modalError && (
-              <div className="mb-4 rounded-lg border border-[#e5484d]/20 bg-[#e5484d]/10 px-4 py-3 text-[14px] text-[#ffb8bb]">
-                {modalError}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {stockIngredients.map((ingredient) => {
-                const current = parseFloat(stock[ingredient] || '0') || 0;
-                const defaultUsage = requiredIngredients[ingredient] ?? 0;
-                const addValue = addAmounts[ingredient] ?? '0';
-                const usageValue = usageAmounts[ingredient] ?? String(defaultUsage);
-                const enteredAdd = parseFloat(addValue || '0') || 0;
-                const enteredUsage = parseFloat(usageValue || '0') || 0;
-                const unit = INGREDIENT_UNITS[ingredient] ?? 'unit';
-
-                return (
-                  <div key={ingredient} className="rounded-lg border border-hairline bg-canvas p-4">
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div>
-                        <p className="text-[15px] font-medium text-ink capitalize">{ingredient.replace(/_/g, ' ')}</p>
-                        <p className="text-[12px] text-ink-subtle mt-1">
-                          Stok saat ini: {current} {unit}
-                        </p>
-                      </div>
-                      <span className="text-[12px] px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted border border-hairline">
-                        {unit}
-                      </span>
-                    </div>
-
-                    {activeModal === 'add' ? (
-                      <div>
-                        <label className="block text-[12px] text-ink-subtle mb-1">Tambahan Hari Ini</label>
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          value={addValue}
-                          onChange={(e) => setAddAmounts((prev) => ({ ...prev, [ingredient]: e.target.value }))}
-                          className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink text-right focus:outline-none focus:border-hairline-strong"
-                        />
-                        <p className="text-[12px] text-ink-subtle mt-2">
-                          Setelah ditambah: {current + enteredAdd} {unit}
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="block text-[12px] text-ink-subtle mb-1">Dipakai Hari Ini</label>
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          value={usageValue}
-                          onChange={(e) => setUsageAmounts((prev) => ({ ...prev, [ingredient]: e.target.value }))}
-                          className="w-full bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink text-right focus:outline-none focus:border-hairline-strong"
-                        />
-                        <p className="text-[12px] text-ink-subtle mt-2">
-                          Default model: {defaultUsage} {unit} · Sisa setelah input: {Math.max(0, current - enteredUsage)} {unit}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-end">
-              <button
-                type="button"
-                onClick={closeModal}
-                className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-surface-1 border border-hairline text-ink hover:bg-surface-2 transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={activeModal === 'add' ? saveAddedStock : saveUsedStock}
-                className="px-[14px] py-2 rounded-md text-[14px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors"
-              >
-                {activeModal === 'add' ? 'Simpan Penambahan' : 'Simpan Pemakaian'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {saved && (
-        <div className="fixed bottom-5 right-5 z-50 rounded-lg bg-surface-1 border border-hairline px-4 py-3 text-[14px] text-ink shadow-xl">
-          Perubahan stok tersimpan.
-        </div>
-      )}
     </div>
   );
 }
