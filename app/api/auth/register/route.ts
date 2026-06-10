@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createUserRecord, findUserByUsername } from '@/lib/auth-store';
 import { hashPassword, sanitizeUser } from '@/lib/auth';
+// Tambahan untuk Firebase
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +36,24 @@ export async function POST(request: Request) {
 
     const { password_hash, password_salt } = hashPassword(password);
     const user = await createUserRecord(username, password_hash, password_salt);
+
+    // SINKRONISASI OTOMATIS KE FIREBASE CLOUD
+    try {
+      if (db) {
+        await setDoc(doc(db, 'users', user.user_id), {
+          username: user.username,
+          createdAt: new Date().toISOString(),
+          modelTrainingStatus: 'idle',
+          menuList: [],
+          salesHistory: [],
+          stockData: {},
+          wasteLog: []
+        });
+      }
+    } catch (firebaseErr) {
+      console.error("Gagal sinkronisasi user ke Firebase:", firebaseErr);
+      // Registrasi tetap dianggap sukses walau sinkron cloud gagal
+    }
 
     return NextResponse.json({ user: sanitizeUser(user) }, { status: 201 });
   } catch (error) {

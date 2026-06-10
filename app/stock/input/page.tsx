@@ -66,7 +66,7 @@ export default function StockInputPage() {
       await saveStockData(newStock);
       await loadData();
       setInputQty('');
-      setMessage(`✅ Sukses menambahkan ${qtyToAdd.toLocaleString('id-ID')} unit ke dalam stok ${selectedIngredient.replace(/_/g, ' ')}.`);
+      setMessage(`Sukses menambahkan ${qtyToAdd.toLocaleString('id-ID')} unit ke dalam stok ${selectedIngredient.replace(/_/g, ' ')}.`);
     } catch (err) {
       setError('Gagal menyinkronkan data stok baru ke server Cloud Firebase.');
     }
@@ -84,7 +84,7 @@ export default function StockInputPage() {
         {!isMounted ? (
           <p className="text-sm text-ink-subtle">Memuat formulir...</p>
         ) : activeIngredients.length === 0 ? (
-          <p className="text-sm text-red-600">⚠️ Harap unggah file resep CSV (BOM) di halaman utama gudang terlebih dahulu sebelum mengisi stok.</p>
+          <p className="text-sm text-red-600">Harap unggah file resep CSV (BOM) di halaman utama gudang terlebih dahulu sebelum mengisi stok.</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

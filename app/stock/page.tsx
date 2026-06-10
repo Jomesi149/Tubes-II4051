@@ -109,7 +109,7 @@ export default function StockPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link href="/stock/input" className="px-[14px] py-2 rounded-md border border-hairline bg-surface-1 text-ink">+ Input Masuk Stok</Link>
-          <Link href="/stock/usage" className="px-[14px] py-2 rounded-md border border-hairline bg-surface-1 text-ink">📋 Log Penggunaan Stok</Link>
+          <Link href="/stock/usage" className="px-[14px] py-2 rounded-md border border-hairline bg-surface-1 text-ink">Log Penggunaan Stok</Link>
         </div>
       </div>
 
@@ -121,7 +121,7 @@ export default function StockPage() {
             {!isMounted ? (
               <div className="rounded-md bg-surface-2 px-4 py-3 text-sm text-ink-subtle animate-pulse">Memuat status...</div>
             ) : recipeLocked ? (
-              <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">✅ Struktur resep (BOM) toko Anda telah berhasil dikunci di Firebase Cloud.</div>
+              <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">Struktur resep (BOM) toko Anda telah berhasil dikunci di Firebase Cloud.</div>
             ) : (
               <input id="recipe-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleRecipeUpload} className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2" />
             )}
@@ -135,7 +135,7 @@ export default function StockPage() {
           {!isMounted ? (
             <p className="text-sm text-ink-subtle">Memuat inventaris...</p>
           ) : !recipeLocked || activeIngredients.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-hairline bg-canvas px-4 py-10 text-center text-sm text-ink-subtle">⚠️ Silakan unggah struktur resep personal (BOM) toko Anda untuk memantau stok.</div>
+            <div className="rounded-lg border border-dashed border-hairline bg-canvas px-4 py-10 text-center text-sm text-ink-subtle">Silakan unggah struktur resep personal (BOM) toko Anda untuk memantau stok.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">

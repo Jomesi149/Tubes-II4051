@@ -95,7 +95,7 @@ export default function StockUsagePage() {
 
       await loadData();
       setInputQty('');
-      setMessage(`✅ Sukses memotong sebanyak ${qtyToReduce.toLocaleString('id-ID')} dari total stok bahan ${selectedIngredient.replace(/_/g, ' ')}.`);
+      setMessage(`Sukses memotong sebanyak ${qtyToReduce.toLocaleString('id-ID')} dari total stok bahan ${selectedIngredient.replace(/_/g, ' ')}.`);
     } catch (err) {
       setError('Gagal memperbarui kalkulasi pengurangan stok ke Cloud Firebase.');
     }
@@ -113,7 +113,7 @@ export default function StockUsagePage() {
         {!isMounted ? (
           <p className="text-sm text-ink-subtle">Memuat formulir...</p>
         ) : activeIngredients.length === 0 ? (
-          <p className="text-sm text-red-600">⚠️ Harap unggah file resep CSV (BOM) di halaman utama gudang terlebih dahulu sebelum mencatat penggunaan.</p>
+          <p className="text-sm text-red-600">Harap unggah file resep CSV (BOM) di halaman utama gudang terlebih dahulu sebelum mencatat penggunaan.</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>

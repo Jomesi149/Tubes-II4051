@@ -256,7 +256,7 @@ export default function SalesPage() {
             {!isMounted ? (
               <div className="rounded-md bg-surface-2 px-4 py-3 text-sm text-ink-subtle animate-pulse">Memuat status...</div>
             ) : uploadLocked ? (
-              <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">✅ Data penjualan sudah diunggah dan dikunci per akun.</div>
+              <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">Data penjualan sudah diunggah dan dikunci per akun.</div>
             ) : (
               <input id="sales-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} disabled={isTraining} className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white disabled:opacity-60" />
             )}
