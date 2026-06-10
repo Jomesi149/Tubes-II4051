@@ -16,6 +16,7 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AUTH_REQUEST_TIMEOUT_MS = 15000;
 
 function readStoredUser(): AuthUser | null {
   if (typeof window === 'undefined') {
@@ -64,39 +65,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (username: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
 
-    const data = await response.json();
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok || !data.user) {
-      return { ok: false, message: data.message || 'Login gagal' };
+      const data = await response.json();
+
+      if (!response.ok || !data.user) {
+        return { ok: false, message: data.message || 'Login gagal' };
+      }
+
+      setUser(data.user);
+      persistUser(data.user);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: 'Koneksi login timeout. Coba lagi beberapa saat.' };
+    } finally {
+      window.clearTimeout(timeout);
     }
-
-    setUser(data.user);
-    persistUser(data.user);
-    return { ok: true };
   };
 
   const register = async (username: string, password: string) => {
-    const response = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), AUTH_REQUEST_TIMEOUT_MS);
 
-    const data = await response.json();
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+        signal: controller.signal,
+      });
 
-    if (!response.ok || !data.user) {
-      return { ok: false, message: data.message || 'Registrasi gagal' };
+      const data = await response.json();
+
+      if (!response.ok || !data.user) {
+        return { ok: false, message: data.message || 'Registrasi gagal' };
+      }
+
+      setUser(data.user);
+      persistUser(data.user);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: 'Koneksi registrasi timeout. Coba lagi beberapa saat.' };
+    } finally {
+      window.clearTimeout(timeout);
     }
-
-    setUser(data.user);
-    persistUser(data.user);
-    return { ok: true };
   };
 
   const logout = () => {

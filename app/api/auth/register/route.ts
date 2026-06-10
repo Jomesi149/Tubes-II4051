@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createUserRecord, findUserByUsername } from '@/lib/auth-store';
+import { createUserRecord } from '@/lib/auth-store';
 import { hashPassword, sanitizeUser } from '@/lib/auth';
 
 // KUNCI UTAMA: Matikan agresivitas cache Next.js agar internal fetch Firebase tidak deadlock
@@ -30,17 +30,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Password minimal 6 karakter' }, { status: 400 });
     }
 
-    const existingUser = await findUserByUsername(username);
-    if (existingUser) {
-      return NextResponse.json({ message: 'Username sudah terdaftar' }, { status: 409 });
-    }
-
     const { password_hash, password_salt } = hashPassword(password);
     const user = await createUserRecord(username, password_hash, password_salt);
 
     return NextResponse.json({ user: sanitizeUser(user) }, { status: 201 });
   } catch (error) {
     console.error("DEBUG REGISTER ERROR:", error);
+    if (error instanceof Error && error.message === 'Username sudah terdaftar') {
+      return NextResponse.json({ message: error.message }, { status: 409 });
+    }
+
     return NextResponse.json({ message: error instanceof Error ? error.message : 'Registrasi gagal' }, { status: 500 });
   }
 }
