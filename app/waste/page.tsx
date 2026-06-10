@@ -7,7 +7,7 @@ import {
   loadWasteLog,
   persistWasteRecord,
 } from '@/lib/backend-store';
-import { clearHistoricalData, getMenuList, formatRp, todayString } from '@/lib/storage';
+import { getMenuList, formatRp, todayString } from '@/lib/storage';
 import type { WasteReason, WasteRecord, WasteItem, MenuItem } from '@/lib/types';
 
 const REASONS: WasteReason[] = ['Kedaluwarsa', 'Rusak', 'Sisa Produksi', 'Terbuang'];
@@ -157,51 +157,30 @@ export default function WastePage() {
   const [reason, setReason] = useState<WasteReason>('Sisa Produksi');
   const [saved, setSaved] = useState(false);
   const [ingredientsList, setIngredientsList] = useState<string[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     const load = async () => {
-      clearHistoricalData();
+      // PERBAIKAN: Hapus fungsi clearHistoricalData() bawaan agar data tidak terhapus otomatis saat halaman dibuka!
       await initializeBackendStore();
       setLog(await loadWasteLog());
-      const menus = getMenuList();
+      
+      // PERBAIKAN CRITICAL: Tambahkan operator await untuk membongkar Promise data menu Firebase cloud
+      const menus = await getMenuList();
+      
       const all = new Set<string>();
-      menus.forEach((m: MenuItem) => Object.keys(m.recipe).forEach((ing) => all.add(ing)));
+      menus.forEach((m: MenuItem) => Object.keys(m.recipe || {}).forEach((ing) => all.add(ing)));
       const excluded = new Set(['minyak_goreng', 'minyak', 'air', 'es_batu', 'tusuk_sate', 'minyak_ goreng']);
       const filtered = Array.from(all).filter((i) => !Array.from(excluded).some((ex) => i.includes(ex)));
       filtered.sort();
       setIngredientsList(filtered);
+      
       if (filtered.length > 0) {
         const first = filtered[0];
         setIngredient(first);
-        const units: Record<string, string> = {
-          beras: 'gram',
-          garam: 'gram',
-          telur: 'butir',
-          mie_instan: 'bungkus',
-          mie_bihun: 'gram',
-          sawi: 'gram',
-          kol: 'gram',
-          cabai: 'gram',
-          ayam: 'gram',
-          bawang_putih: 'gram',
-          bawang_merah: 'gram',
-          daun_bawang: 'gram',
-          gula: 'gram',
-          kecap_manis: 'ml',
-          daging_sapi: 'gram',
-          tusuk_sate: 'buah',
-          bumbu_kacang: 'gram',
-          tepung_terigu: 'gram',
-          teh_celup: 'sachet',
-          es_batu: 'gram',
-          air: 'ml',
-          jeruk: 'buah',
-          kopi_bubuk: 'gram',
-          susu: 'ml',
-          mie_basah: 'gram',
-        };
-        setUnit(units[first] ?? 'unit');
+        setUnit(INGREDIENT_UNITS[first] ?? 'unit');
       }
+      setIsMounted(true);
     };
 
     void load();
@@ -255,6 +234,14 @@ export default function WastePage() {
 
   const recentLog = [...log].sort((a, b) => b.date.localeCompare(a.date));
 
+  if (!isMounted) {
+    return (
+      <div className="flex items-center justify-center h-64 text-ink-subtle text-sm">
+        Memuat data log waste cloud...
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
       <div className="mb-8">
@@ -295,7 +282,7 @@ export default function WastePage() {
               >
                 {ingredientsList.map((ing) => (
                   <option key={ing} value={ing}>
-                    {ing.replace(/_/g, ' ')}
+                    {ing.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                   </option>
                 ))}
               </select>
@@ -461,7 +448,7 @@ export default function WastePage() {
                       {record.items.map((item, j) => (
                         <div key={j} className="flex items-center justify-between text-[13px] text-ink-subtle">
                           <span>
-                            {item.ingredient} - {item.quantity} {item.unit} ({item.reason})
+                            {item.ingredient.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} - {item.quantity} {item.unit} ({item.reason})
                           </span>
                           <span className="text-ink-tertiary">{formatRp(item.total_loss)}</span>
                         </div>

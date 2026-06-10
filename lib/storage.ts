@@ -1,3 +1,7 @@
+'use client';
+
+import { db } from './firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import type {
   MenuItem,
   SalesRecord,
@@ -25,234 +29,72 @@ const CURRENT_SCHEMA_VERSION = '5';
 export type ModelTrainingStatus = 'idle' | 'training' | 'ready' | 'error';
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-const CONDITIONS: DayCondition[] = ['Normal', 'Normal', 'Normal', 'Ramai', 'Normal', 'Hujan', 'Normal', 'Normal', 'Ramai', 'Normal', 'Normal', 'Normal', 'Normal', 'Normal'];
-
-function dateString(daysAgo: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().split('T')[0];
-}
-
-function dayName(daysAgo: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return DAY_NAMES[d.getDay()];
-}
 
 const SEED_MENUS: MenuItem[] = [
   {
     id: 'nasi_goreng',
     name: 'Nasi Goreng',
-    recipe: {
-      beras: 200,
-      telur: 1,
-      minyak_goreng: 15,
-      bawang_putih: 5,
-      kecap_manis: 10,
-      garam: 2,
-    },
+    recipe: { beras: 200, telur: 1, minyak_goreng: 15, bawang_putih: 5, kecap_manis: 10, garam: 2 },
   },
   {
     id: 'mie_goreng',
     name: 'Mie Goreng Spesial',
-    recipe: {
-      mie_instan: 1,
-      telur: 1,
-      sawi: 30,
-      kol: 20,
-      bawang_putih: 5,
-      cabai: 3,
-    },
+    recipe: { mie_instan: 1, telur: 1, sawi: 30, kol: 20, bawang_putih: 5, cabai: 3 },
   },
   {
     id: 'soto_ayam',
     name: 'Soto Ayam',
-    recipe: {
-      ayam: 80,
-      bawang_putih: 5,
-      bawang_merah: 5,
-      kol: 20,
-      daun_bawang: 5,
-      air: 300,
-      garam: 2,
-    },
+    recipe: { ayam: 80, bawang_putih: 5, bawang_merah: 5, kol: 20, daun_bawang: 5, air: 300, garam: 2 },
   },
   {
     id: 'bakso_sapi',
     name: 'Bakso Sapi',
-    recipe: {
-      daging_sapi: 70,
-      mie_bihun: 50,
-      bawang_putih: 5,
-      daun_bawang: 5,
-      air: 300,
-      garam: 2,
-    },
+    recipe: { daging_sapi: 70, mie_bihun: 50, bawang_putih: 5, daun_bawang: 5, air: 300, garam: 2 },
   },
   {
     id: 'sate_ayam',
     name: 'Sate Ayam',
-    recipe: {
-      ayam: 100,
-      tusuk_sate: 1,
-      bumbu_kacang: 30,
-      kecap_manis: 10,
-      garam: 2,
-    },
+    recipe: { ayam: 100, tusuk_sate: 1, bumbu_kacang: 30, kecap_manis: 10, garam: 2 },
   },
   {
     id: 'ayam_geprek',
     name: 'Ayam Geprek',
-    recipe: {
-      ayam: 100,
-      tepung_terigu: 30,
-      cabai: 5,
-      garam: 2,
-      minyak_goreng: 15,
-    },
+    recipe: { ayam: 100, tepung_terigu: 30, cabai: 5, garam: 2, minyak_goreng: 15 },
   },
   {
     id: 'gorengan',
     name: 'Gorengan',
-    recipe: {
-      tepung_terigu: 50,
-      minyak_goreng: 20,
-      garam: 1,
-      air: 30,
-    },
+    recipe: { tepung_terigu: 50, minyak_goreng: 20, garam: 1, air: 30 },
   },
   {
     id: 'es_teh_manis',
     name: 'Es Teh Manis',
-    recipe: {
-      teh_celup: 1,
-      gula: 15,
-      air: 250,
-      es_batu: 50,
-    },
+    recipe: { teh_celup: 1, gula: 15, air: 250, es_batu: 50 },
   },
   {
     id: 'es_jeruk',
     name: 'Es Jeruk',
-    recipe: {
-      jeruk: 1,
-      gula: 10,
-      air: 250,
-      es_batu: 50,
-    },
+    recipe: { jeruk: 1, gula: 10, air: 250, es_batu: 50 },
   },
   {
     id: 'kopi_susu',
     name: 'Kopi Susu',
-    recipe: {
-      kopi_bubuk: 10,
-      susu: 50,
-      gula: 10,
-      air: 200,
-      es_batu: 50,
-    },
+    recipe: { kopi_bubuk: 10, susu: 50, gula: 10, air: 200, es_batu: 50 },
   },
 ];
 
 const SEED_PRICES: IngredientPrices = {
-  beras: 15,
-  telur: 2500,
-  minyak_goreng: 18,
-  bawang_putih: 35,
-  kecap_manis: 8,
-  garam: 2,
-  mie_instan: 3500,
-  sawi: 8,
-  kol: 6,
-  cabai: 25,
-  ayam: 35,
-  bawang_merah: 30,
-  daun_bawang: 15,
-  air: 1,
-  daging_sapi: 80,
-  mie_bihun: 12,
-  mie_basah: 10,
-  tusuk_sate: 150,
-  bumbu_kacang: 20,
-  tepung_terigu: 14,
-  teh_celup: 250,
-  gula: 12,
-  es_batu: 1,
-  jeruk: 2000,
-  kopi_bubuk: 90,
-  susu: 18,
+  beras: 15, telur: 2500, minyak_goreng: 18, bawang_putih: 35, kecap_manis: 8, garam: 2,
+  mie_instan: 3500, sawi: 8, kol: 6, cabai: 25, ayam: 35, bawang_merah: 30, daun_bawang: 15,
+  air: 1, daging_sapi: 80, mie_bihun: 12, mie_basah: 10, tusuk_sate: 150, bumbu_kacang: 20,
+  tepung_terigu: 14, teh_celup: 250, gula: 12, es_batu: 1, jeruk: 2000, kopi_bubuk: 90, susu: 18,
 };
 
-function migrateIngredientPricesIfNeeded(): IngredientPrices {
-  const current = read<IngredientPrices>(KEYS.prices, {});
-  const merged: IngredientPrices = { ...SEED_PRICES, ...current };
-
-  const currentKeys = Object.keys(current);
-  const missingSeedKeys = Object.keys(SEED_PRICES).some((key) => current[key] === undefined);
-
-  if (currentKeys.length === 0 || missingSeedKeys) {
-    write(KEYS.prices, merged);
-  }
-
-  return merged;
-}
-
-function generateSeedSales(): SalesRecord[] {
-  const records: SalesRecord[] = [];
-  for (let i = 14; i >= 1; i--) {
-    const condition = CONDITIONS[i - 1] ?? 'Normal';
-    const multiplier = condition === 'Ramai' ? 1.25 : condition === 'Hujan' ? 0.8 : 1.0;
-    const sales: Record<string, number> = {};
-
-    SEED_MENUS.forEach((menu, idx) => {
-      // base mean varies slightly by index to create realistic variety
-      const mean = 25 + idx * 3;
-      const std = Math.max(3, Math.round(mean * 0.15));
-      const raw = mean * multiplier + (Math.random() - 0.5) * std * 2;
-      sales[menu.id] = Math.max(0, Math.round(raw));
-    });
-
-    records.push({
-      date: dateString(i),
-      day_of_week: dayName(i),
-      condition,
-      sales,
-    });
-  }
-  return records;
-}
-
-function generateSeedWaste(): WasteRecord[] {
-  return [
-    {
-      date: dateString(7),
-      items: [
-        { ingredient: 'beras', quantity: 500, unit: 'gram', reason: 'Sisa Produksi', unit_price: 12, total_loss: 6000 },
-      ],
-      total_daily_loss: 6000,
-    },
-    {
-      date: dateString(3),
-      items: [
-        { ingredient: 'ayam', quantity: 200, unit: 'gram', reason: 'Kedaluwarsa', unit_price: 35, total_loss: 7000 },
-        { ingredient: 'mie_basah', quantity: 300, unit: 'gram', reason: 'Sisa Produksi', unit_price: 10, total_loss: 3000 },
-      ],
-      total_daily_loss: 10000,
-    },
-  ];
-}
-
 function getCurrentUserId(): string {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
+  if (typeof window === 'undefined') return '';
   try {
     const raw = window.localStorage.getItem('ventore-auth-user');
-    if (!raw) {
-      return '';
-    }
-
+    if (!raw) return '';
     const parsed = JSON.parse(raw) as { user_id?: string };
     return parsed.user_id ?? '';
   } catch {
@@ -266,73 +108,31 @@ function notifyModelStatusChanged(status: ModelTrainingStatus): void {
   }
 }
 
-function getUploadCompletedKey(): string {
-  const userId = getCurrentUserId();
-  return userId ? `ventore_sales_upload_completed:${userId}` : 'ventore_sales_upload_completed';
-}
-
-export function getModelTrainingStatus(): ModelTrainingStatus {
-  try {
-    const raw = localStorage.getItem(MODEL_STATUS_KEY);
-    if (raw === 'training' || raw === 'ready' || raw === 'error') {
-      return raw;
-    }
-  } catch {
-    // ignore
-  }
-
-  return 'idle';
-}
-
-export function setModelTrainingStatus(status: ModelTrainingStatus): void {
-  write(MODEL_STATUS_KEY, status);
-  notifyModelStatusChanged(status);
-}
-
-export function isSalesUploadCompleted(): boolean {
-  return getModelTrainingStatus() === 'ready';
-}
-
-export function markModelTrainingInProgress(): void {
-  setModelTrainingStatus('training');
-}
-
-export function markSalesUploadCompleted(): void {
-  setModelTrainingStatus('ready');
-}
-
-export function markModelTrainingError(): void {
-  setModelTrainingStatus('error');
-}
-
-export function resetModelTrainingStatus(): void {
-  setModelTrainingStatus('idle');
-}
-
-export function clearHistoricalData(): void {
-  write(KEYS.sales, []);
-  write(KEYS.waste, []);
-}
-
-function getMenuStorageKey(): string {
-  const userId = getCurrentUserId();
-  return userId ? `${KEYS.menu}:${userId}` : KEYS.menu;
-}
-
-function getRecipeImportMarkerKey(): string {
-  const userId = getCurrentUserId();
-  return userId ? `${RECIPE_IMPORT_MARKER}:${userId}` : RECIPE_IMPORT_MARKER;
-}
-
-// Fungsi pembantu baru untuk menyisipkan userId ke semua kunci penyimpanan otomatis
 function getScopedKey(key: string): string {
   const userId = getCurrentUserId();
   return userId ? `${key}:${userId}` : key;
 }
 
-function read<T>(key: string, fallback: T): T {
+// Handler Asinkron Pembacaan Lapisan Cloud Firestore & Local Fallback
+async function readCloudField<T>(fieldKey: string, localStorageKey: string, fallback: T): Promise<T> {
   try {
-    const scopedKey = getScopedKey(key);
+    if (db) {
+      const userId = getCurrentUserId();
+      if (userId) {
+        const docRef = doc(db, 'users', userId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data[fieldKey] !== undefined) return data[fieldKey] as T;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Firebase offline, menggunakan penyimpanan lokal.", err);
+  }
+
+  try {
+    const scopedKey = getScopedKey(localStorageKey);
     const raw = localStorage.getItem(scopedKey);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
@@ -340,149 +140,124 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 
-function write<T>(key: string, value: T): void {
+// Handler Asinkron Penulisan Lapisan Cloud Firestore & Local Fallback
+async function writeCloudField<T>(fieldKey: string, localStorageKey: string, value: T): Promise<void> {
   try {
-    // PERBAIKAN: Tulis data ke tempat penampungan khusus user tersebut
-    const scopedKey = getScopedKey(key);
+    if (db) {
+      const userId = getCurrentUserId();
+      if (userId) {
+        const docRef = doc(db, 'users', userId);
+        await setDoc(docRef, { [fieldKey]: value }, { merge: true });
+      }
+    }
+  } catch (err) {
+    console.error("Gagal sinkronisasi data ke Firebase Cloud:", err);
+  }
+
+  try {
+    const scopedKey = getScopedKey(localStorageKey);
     localStorage.setItem(scopedKey, JSON.stringify(value));
   } catch {
-    // storage quota exceeded — silent fail for MVP
+    // ignore
   }
 }
 
-function readMenuListData(fallback: MenuItem[] = []): MenuItem[] {
-  try {
-    const scopedKey = getMenuStorageKey();
-    const scopedRaw = localStorage.getItem(scopedKey);
-    if (scopedRaw) {
-      return JSON.parse(scopedRaw) as MenuItem[];
-    }
+// --- CORE ASYNC EXPORT FUNCTIONS ---
 
-    const legacyRaw = localStorage.getItem(KEYS.menu);
-    if (legacyRaw) {
-      return JSON.parse(legacyRaw) as MenuItem[];
+export async function getModelTrainingStatus(): Promise<ModelTrainingStatus> {
+  return readCloudField<ModelTrainingStatus>('modelTrainingStatus', MODEL_STATUS_KEY, 'idle');
+}
+
+export async function setModelTrainingStatus(status: ModelTrainingStatus): Promise<void> {
+  await writeCloudField('modelTrainingStatus', MODEL_STATUS_KEY, status);
+  notifyModelStatusChanged(status);
+}
+
+export async function isSalesUploadCompleted(): Promise<boolean> {
+  return (await getModelTrainingStatus()) === 'ready';
+}
+
+export async function markModelTrainingInProgress(): Promise<void> {
+  await setModelTrainingStatus('training');
+}
+
+export async function markSalesUploadCompleted(): Promise<void> {
+  await setModelTrainingStatus('ready');
+}
+
+export async function markModelTrainingError(): Promise<void> {
+  await setModelTrainingStatus('error');
+}
+
+export async function resetModelTrainingStatus(): Promise<void> {
+  await setModelTrainingStatus('idle');
+}
+
+// KEMBALIKAN FUNGSI PEMBERSIH UNTUK FORM WASTE LOG OPERASIONAL
+export async function clearHistoricalData(): Promise<void> {
+  await writeCloudField('salesHistory', KEYS.sales, []);
+  await writeCloudField('wasteLog', KEYS.waste, []);
+}
+
+// KEMBALIKAN FUNGSI INITIALIZATION DUMMY VALUE BIAR TIDAK CRASH SAAT BUILD NEXT.JS
+export async function initializeIfNeeded(): Promise<void> {
+  if (typeof window !== 'undefined') {
+    if (!localStorage.getItem(KEYS.initialized)) {
+      localStorage.setItem(KEYS.initialized, '1');
     }
-  } catch {
-    // fall back to provided data
   }
-
-  return fallback;
 }
 
-function writeMenuListData(menus: MenuItem[]): void {
-  write(getMenuStorageKey(), menus);
-}
-
-function markRecipeImport(): void {
-  write(getRecipeImportMarkerKey(), '1');
-}
-
-function isModelMenuList(value: MenuItem[] | null | undefined): boolean {
-  if (!value || value.length !== SEED_MENUS.length) {
-    return false;
-  }
-
-  return SEED_MENUS.every((menu, index) => {
-    const current = value[index];
-    if (!current || current.id !== menu.id) {
-      return false;
-    }
-
-    const expectedRecipeEntries = Object.entries(menu.recipe);
-    const currentRecipeEntries = Object.entries(current.recipe || {});
-
-    if (expectedRecipeEntries.length !== currentRecipeEntries.length) {
-      return false;
-    }
-
-    return expectedRecipeEntries.every(([ingredient, quantity]) => current.recipe?.[ingredient] === quantity);
-  });
-}
-
-function migrateMenuListIfNeeded(): MenuItem[] {
-  const current = readMenuListData([]);
-
-  // PERBAIKAN CRITICAL: Hanya seed jika data kosong, JANGAN hapus resep buatan user!
-  if (!current || current.length === 0) {
-    writeMenuListData(SEED_MENUS);
-    localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
-    return SEED_MENUS;
-  }
-
-  localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
+export async function getMenuList(): Promise<MenuItem[]> {
+  const current = await readCloudField<MenuItem[]>('menuList', KEYS.menu, []);
+  if (!current || current.length === 0) return SEED_MENUS;
   return current;
 }
 
-export function initializeIfNeeded(): void {
-  const currentVersion = localStorage.getItem(KEYS.schemaVersion);
-
-  if (currentVersion !== CURRENT_SCHEMA_VERSION) {
-    migrateMenuListIfNeeded();
-    migrateIngredientPricesIfNeeded();
-    localStorage.setItem(KEYS.schemaVersion, CURRENT_SCHEMA_VERSION);
-  }
-
-  if (!localStorage.getItem(KEYS.initialized)) {
-    write(KEYS.sales, []);
-    write(KEYS.prices, SEED_PRICES);
-    write(KEYS.waste, []);
-    write(KEYS.stock, {});
-    localStorage.setItem(KEYS.initialized, '1');
-  }
+export async function saveMenuList(menus: MenuItem[]): Promise<void> {
+  await writeCloudField('menuList', KEYS.menu, menus);
+  await writeCloudField('recipeImportedMarker', RECIPE_IMPORT_MARKER, '1');
 }
 
-export function getMenuList(): MenuItem[] {
-  return migrateMenuListIfNeeded();
+export async function hasPersonalRecipeData(): Promise<boolean> {
+  const marker = await readCloudField<string>('recipeImportedMarker', RECIPE_IMPORT_MARKER, '0');
+  return marker === '1';
 }
 
-export function saveMenuList(menus: MenuItem[]): void {
-  writeMenuListData(menus);
-  markRecipeImport();
+export async function getSalesHistory(): Promise<SalesRecord[]> {
+  return readCloudField<SalesRecord[]>('salesHistory', KEYS.sales, []);
 }
 
-export function hasPersonalRecipeData(): boolean {
-  try {
-    return localStorage.getItem(getRecipeImportMarkerKey()) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function getSalesHistory(): SalesRecord[] {
-  return read<SalesRecord[]>(KEYS.sales, []);
-}
-
-export function appendSalesRecord(record: SalesRecord): void {
-  const history = getSalesHistory();
-  // replace existing record for same date if any
+export async function appendSalesRecord(record: SalesRecord): Promise<void> {
+  const history = await getSalesHistory();
   const idx = history.findIndex((r) => r.date === record.date);
   if (idx >= 0) history[idx] = record;
   else history.push(record);
-  write(KEYS.sales, history);
+  await writeCloudField('salesHistory', KEYS.sales, history);
 }
 
-export function getStockData(): StockData {
-  return read<StockData>(KEYS.stock, {});
+export async function getStockData(): Promise<StockData> {
+  return readCloudField<StockData>('stockData', KEYS.stock, {});
 }
 
-export function saveStockData(data: StockData): void {
-  write(KEYS.stock, data);
+export async function saveStockData(data: StockData): Promise<void> {
+  await writeCloudField('stockData', KEYS.stock, data);
 }
 
-export function getIngredientPrices(): IngredientPrices {
-  return migrateIngredientPricesIfNeeded();
+export async function getIngredientPrices(): Promise<IngredientPrices> {
+  return readCloudField<IngredientPrices>('ingredientPrices', KEYS.prices, SEED_PRICES);
 }
 
-export function saveIngredientPrices(prices: IngredientPrices): void {
-  write(KEYS.prices, prices);
+export async function saveIngredientPrices(prices: IngredientPrices): Promise<void> {
+  await writeCloudField('ingredientPrices', KEYS.prices, prices);
 }
 
-export function getWasteLog(): WasteRecord[] {
-  return read<WasteRecord[]>(KEYS.waste, []);
+export async function getWasteLog(): Promise<WasteRecord[]> {
+  return readCloudField<WasteRecord[]>('wasteLog', KEYS.waste, []);
 }
 
-export function appendWasteRecord(record: WasteRecord): void {
-  const log = getWasteLog();
+export async function appendWasteRecord(record: WasteRecord): Promise<void> {
+  const log = await getWasteLog();
   const idx = log.findIndex((r) => r.date === record.date);
   if (idx >= 0) {
     log[idx].items.push(...record.items);
@@ -490,11 +265,11 @@ export function appendWasteRecord(record: WasteRecord): void {
   } else {
     log.push(record);
   }
-  write(KEYS.waste, log);
+  await writeCloudField('wasteLog', KEYS.waste, log);
 }
 
-export function clearWasteLog(): void {
-  write(KEYS.waste, []);
+export async function clearWasteLog(): Promise<void> {
+  await writeCloudField('wasteLog', KEYS.waste, []);
 }
 
 export const formatRp = (value: number): string =>
@@ -506,5 +281,4 @@ export const formatRp = (value: number): string =>
   }).format(value);
 
 export const todayString = (): string => new Date().toISOString().split('T')[0];
-
 export const DAY_NAMES_EXPORTED = DAY_NAMES;

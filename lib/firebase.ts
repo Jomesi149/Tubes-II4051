@@ -18,11 +18,14 @@ export function isFirebaseConfigured(): boolean {
   return hasRequiredConfig();
 }
 
-export function getFirebaseDb() {
-  if (!hasRequiredConfig()) {
-    return null;
-  }
+// Inisialisasi Firebase App secara aman (Singleton Pattern untuk Next.js)
+const app = getApps().length > 0 
+  ? getApps()[0] 
+  : (hasRequiredConfig() ? initializeApp(firebaseConfig) : null);
 
-  const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-  return getFirestore(app);
+// Ekspor Firestore instance secara langsung agar mudah di-import di file storage
+export const db = app ? getFirestore(app) : null;
+
+export function getFirebaseDb() {
+  return db;
 }

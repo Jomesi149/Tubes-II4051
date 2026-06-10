@@ -1,118 +1,131 @@
 'use client';
-/* eslint-disable react-hooks/set-state-in-effect */
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { initializeBackendStore, loadStockData, persistStockData } from '@/lib/backend-store';
-import { getMenuList } from '@/lib/storage';
-import type { MenuItem } from '@/lib/types';
+import Link from 'next/link';
+import { getMenuList, getStockData, saveStockData } from '@/lib/storage';
+import type { MenuItem, StockData } from '@/lib/types';
 
 export default function StockInputPage() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
-  const [stock, setStock] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState(false);
+  const [stock, setStock] = useState<StockData>({});
+  const [isMounted, setIsMounted] = useState(false);
+  const [selectedIngredient, setSelectedIngredient] = useState('');
+  const [inputQty, setInputQty] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  const ingredientUnits: Record<string, string> = {
-    beras: 'gram',
-    telur: 'butir',
-    minyak_goreng: 'ml',
-    bawang_putih: 'gram',
-    kecap_manis: 'ml',
-    garam: 'gram',
-    mie_instan: 'bungkus',
-    sawi: 'gram',
-    kol: 'gram',
-    cabai: 'gram',
-    ayam: 'gram',
-    bawang_merah: 'gram',
-    daun_bawang: 'gram',
-    gula: 'gram',
-    air: 'ml',
-    daging_sapi: 'gram',
-    mie_bihun: 'gram',
-    tusuk_sate: 'buah',
-    bumbu_kacang: 'gram',
-    tepung_terigu: 'gram',
-    teh_celup: 'sachet',
-    es_batu: 'gram',
-    jeruk: 'buah',
-    kopi_bubuk: 'gram',
-    susu: 'ml',
+  const loadData = async () => {
+    const currentMenus = await getMenuList();
+    const currentStock = await getStockData();
+    setMenus(currentMenus);
+    setStock(currentStock);
   };
 
   useEffect(() => {
-    const load = async () => {
-      await initializeBackendStore();
-      const m = getMenuList();
-      setMenus(m);
-
-      const savedStock = await loadStockData();
-      const allIngredients = new Set<string>();
-      m.forEach((menu) => Object.keys(menu.recipe).forEach((ingredient) => allIngredients.add(ingredient)));
-
-      const initial: Record<string, string> = {};
-      allIngredients.forEach((ingredient) => {
-        initial[ingredient] = savedStock[ingredient] !== undefined ? String(savedStock[ingredient]) : '';
-      });
-      setStock(initial);
-    };
-
-    void load();
+    void loadData().then(() => setIsMounted(true));
   }, []);
 
-  const handleSave = () => {
-    const stockData: Record<string, number> = {};
-    Object.entries(stock).forEach(([ingredient, value]) => {
-      stockData[ingredient] = parseFloat(value) || 0;
+  // Ambil daftar bahan baku unik dari resep personal yang sudah di-upload
+  const activeIngredients = (() => {
+    const ingredientsSet = new Set<string>();
+    menus.forEach((menu) => {
+      if (menu.recipe) {
+        Object.keys(menu.recipe).forEach((ing) => { if (ing) ingredientsSet.add(ing); });
+      }
     });
-    void persistStockData(stockData);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    return Array.from(ingredientsSet).sort();
+  })();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage('');
+    setError('');
+
+    if (!selectedIngredient) {
+      setError('Silakan pilih jenis bahan baku terlebih dahulu.');
+      return;
+    }
+
+    const qtyToAdd = parseFloat(inputQty);
+    if (isNaN(qtyToAdd) || qtyToAdd <= 0) {
+      setError('Jumlah kuantitas stok masuk harus berupa angka lebih dari 0.');
+      return;
+    }
+
+    try {
+      // Ambil snapshot stok terbaru dari cloud database Firebase
+      const currentStock = await getStockData();
+      const currentQty = currentStock[selectedIngredient] || 0;
+      
+      const newStock = {
+        ...currentStock,
+        [selectedIngredient]: currentQty + qtyToAdd,
+      };
+
+      // Simpan penambahan data ke Firebase Firestore
+      await saveStockData(newStock);
+      await loadData();
+      setInputQty('');
+      setMessage(`✅ Sukses menambahkan ${qtyToAdd.toLocaleString('id-ID')} unit ke dalam stok ${selectedIngredient.replace(/_/g, ' ')}.`);
+    } catch (err) {
+      setError('Gagal menyinkronkan data stok baru ke server Cloud Firebase.');
+    }
   };
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[13px] font-medium text-ink-subtle tracking-[0.4px] uppercase mb-1">Modul 4</p>
-          <h1 className="text-[28px] font-semibold text-ink tracking-[-0.6px]">Input Stok</h1>
-          <p className="text-[16px] text-ink-muted mt-1">Masukkan stok fisik bahan baku yang tersedia untuk hari ini</p>
-        </div>
-        <Link
-          href="/stock"
-          className="px-[14px] py-2 h-fit rounded-md text-[14px] font-medium bg-surface-1 border border-hairline text-ink hover:bg-surface-2 transition-colors"
-        >
-          Kembali ke Stok & Alert
-        </Link>
+    <div className="p-6 lg:p-8 max-w-[640px] mx-auto">
+      <div className="mb-6">
+        <Link href="/stock" className="text-sm text-primary hover:underline">← Kembali ke Gudang</Link>
+        <h1 className="text-[26px] font-semibold text-ink tracking-[-0.5px] mt-2">Input Masuk Stok</h1>
+        <p className="text-sm text-ink-subtle mt-1">Tambahkan pasokan bahan baku yang baru saja dibeli atau datang ke gudang.</p>
       </div>
 
       <div className="bg-surface-1 border border-hairline rounded-xl p-6">
-        <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-1">Stok Fisik Saat Ini</h2>
-        <p className="text-[14px] text-ink-subtle mb-6">Isi jumlah stok untuk bahan yang dipakai oleh resep hari ini.</p>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {Object.keys(stock).map((ingredient) => (
-            <div key={ingredient} className="flex items-center gap-3 rounded-lg border border-hairline bg-canvas px-3 py-2">
-              <span className="flex-1 text-[15px] text-ink capitalize">{ingredient.replace(/_/g, ' ')}</span>
-              <input
-                type="number"
-                min="0"
-                placeholder="0"
-                value={stock[ingredient]}
-                onChange={(e) => setStock((prev) => ({ ...prev, [ingredient]: e.target.value }))}
-                className="w-28 bg-surface-1 border border-hairline rounded-md px-3 py-2 text-[16px] text-ink text-right focus:outline-none focus:border-hairline-strong"
-              />
-              <span className="text-[14px] text-ink-subtle w-10">{ingredientUnits[ingredient] ?? 'unit'}</span>
+        {!isMounted ? (
+          <p className="text-sm text-ink-subtle">Memuat formulir...</p>
+        ) : activeIngredients.length === 0 ? (
+          <p className="text-sm text-red-600">⚠️ Harap unggah file resep CSV (BOM) di halaman utama gudang terlebih dahulu sebelum mengisi stok.</p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-ink mb-1.5">Pilih Bahan Baku</label>
+              <select
+                value={selectedIngredient}
+                onChange={(e) => setSelectedIngredient(e.target.value)}
+                className="w-full bg-canvas border border-hairline rounded-md px-3 py-2 text-ink focus:outline-none"
+              >
+                <option value="">-- Pilih Bahan --</option>
+                {activeIngredients.map((ing) => (
+                  <option key={ing} value={ing}>
+                    {ing.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())} (Sisa: {stock[ing] || 0})
+                  </option>
+                ))}
+              </select>
             </div>
-          ))}
-        </div>
 
-        <button
-          onClick={handleSave}
-          className="mt-6 w-full px-[14px] py-2 rounded-md text-[14px] font-medium bg-primary text-white hover:bg-primary-hover transition-colors"
-        >
-          {saved ? '✓ Stok Disimpan' : 'Simpan Stok'}
-        </button>
+            <div>
+              <label className="block text-sm font-medium text-ink mb-1.5">Jumlah Stok Masuk</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="Masukkan kuantitas jumlah porsi/gram/ml"
+                  value={inputQty}
+                  onChange={(e) => setInputQty(e.target.value)}
+                  className="flex-1 bg-canvas border border-hairline rounded-md px-3 py-2 text-ink focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {message && <p className="text-sm text-primary font-medium">{message}</p>}
+            {error && <p className="text-sm text-red-600 font-medium">{error}</p>}
+
+            <button type="submit" className="w-full py-2 rounded-md bg-primary text-white font-medium hover:bg-primary-hover transition-colors">
+              Konfirmasi Tambah Stok
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

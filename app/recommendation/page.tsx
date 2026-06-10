@@ -28,8 +28,12 @@ export default function RecommendationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isDateValid, setIsDateValid] = useState(true);
-  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>(getModelTrainingStatus());
-  const [isLocked, setIsLocked] = useState(!isSalesUploadCompleted());
+  
+  // PENYELARASAN STATE ASINKRON UNTUK DUKUNGAN DATABASE CLOUD FIREBASE
+  const [isMounted, setIsMounted] = useState(false);
+  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>('idle');
+  const [isLocked, setIsLocked] = useState(true);
+  const [selectedMenu, setSelectedMenu] = useState<null | { id: string; name: string; recipe?: Record<string, number> }>(null);
 
   async function fetchWeatherForDate(dateStr: string) {
     try {
@@ -100,8 +104,6 @@ export default function RecommendationPage() {
       }
 
       // Auto-select event based on selected date
-      // - If date is the 1st day of month, prefer 'Promo Awal Bulan'
-      // - Else if date is Friday (day 5), set 'Promo Jumat Berkah'
       const dateObj = new Date(dateStr);
       if (dateObj.getDate() === 1) {
         setEvent('Promo Awal Bulan');
@@ -118,13 +120,19 @@ export default function RecommendationPage() {
     }
   }
 
+  // Sinkronisasi pemuatan status gembok lock per user saat inisialisasi awal browser
   useEffect(() => {
-    const syncStatus = () => {
-      setModelStatus(getModelTrainingStatus());
-      setIsLocked(!isSalesUploadCompleted());
+    const syncStatus = async () => {
+      await initializeIfNeeded();
+      const currentStatus = await getModelTrainingStatus();
+      const uploadCompleted = await isSalesUploadCompleted();
+      
+      setModelStatus(currentStatus);
+      setIsLocked(!uploadCompleted);
+      setIsMounted(true);
     };
 
-    syncStatus();
+    void syncStatus();
     window.addEventListener('ventore-model-status-changed', syncStatus);
 
     return () => {
@@ -133,11 +141,10 @@ export default function RecommendationPage() {
   }, []);
 
   useEffect(() => {
-    initializeIfNeeded();
-    if (!isLocked) {
+    if (isMounted && !isLocked) {
       void fetchWeatherForDate(predictionDate);
     }
-  }, [predictionDate, isLocked]);
+  }, [predictionDate, isLocked, isMounted]);
 
   async function handlePredict() {
     if (!isDateValid) {
@@ -161,6 +168,25 @@ export default function RecommendationPage() {
 
   const topItems = prediction?.predictions.slice(0, 3) ?? [];
 
+  const INGREDIENT_UNITS: Record<string, string> = {
+    beras: 'gram', telur: 'butir', minyak_goreng: 'ml', bawang_putih: 'gram',
+    kecap_manis: 'ml', garam: 'gram', mie_instan: 'bungkus', sawi: 'gram',
+    kol: 'gram', cabai: 'gram', ayam: 'gram', bawang_merah: 'gram',
+    daun_bawang: 'gram', gula: 'gram', air: 'ml', daging_sapi: 'gram',
+    mie_bihun: 'gram', tusuk_sate: 'buah', bumbu_kacang: 'gram',
+    tepung_terigu: 'gram', teh_celup: 'sachet', es_batu: 'gram',
+    jeruk: 'buah', kopi_bubuk: 'gram', susu: 'ml', mie_basah: 'gram',
+  };
+
+  // Pengecekan Hydration Rendering Aman untuk Server-Side Rendering
+  if (!isMounted) {
+    return (
+      <div className="flex items-center justify-center h-64 text-ink-subtle text-sm">
+        Memuat status proteksi model...
+      </div>
+    );
+  }
+
   if (isLocked) {
     return (
       <div className="p-6 lg:p-8 max-w-[960px] mx-auto">
@@ -180,46 +206,6 @@ export default function RecommendationPage() {
       </div>
     );
   }
-
-  const [selectedMenu, setSelectedMenu] = useState<null | { id: string; name: string; recipe?: Record<string, number> }>(null);
-
-  const INGREDIENT_UNITS: Record<string, string> = {
-    beras: 'gram',
-    telur: 'butir',
-    minyak_goreng: 'ml',
-    bawang_putih: 'gram',
-    kecap_manis: 'ml',
-    garam: 'gram',
-    mie_instan: 'bungkus',
-    sawi: 'gram',
-    kol: 'gram',
-    cabai: 'gram',
-    ayam: 'gram',
-    bawang_merah: 'gram',
-    daun_bawang: 'gram',
-    gula: 'gram',
-    air: 'ml',
-    daging_sapi: 'gram',
-    mie_bihun: 'gram',
-    tusuk_sate: 'buah',
-    bumbu_kacang: 'gram',
-    tepung_terigu: 'gram',
-    teh_celup: 'sachet',
-    es_batu: 'gram',
-    jeruk: 'buah',
-    kopi_bubuk: 'gram',
-    susu: 'ml',
-    mie_basah: 'gram',
-  };
-
-  useEffect(() => {
-    // load recipes into MODEL_MENU display from storage seed if available
-    initializeIfNeeded();
-    const menus = getMenuList();
-    // replace MODEL_MENU items with recipes when available
-    // (we don't mutate MODEL_MENU; we just keep recipes available when user clicks)
-    // store in a closure via selectedMenu when clicked
-  }, []);
 
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
@@ -388,9 +374,8 @@ export default function RecommendationPage() {
                     <button
                       key={menu.id}
                       type="button"
-                      onClick={() => {
-                        // fetch recipe for this menu from storage
-                        const menus = getMenuList();
+                      onClick={async () => {
+                        const menus = await getMenuList();
                         const found = menus.find((m) => m.id === menu.id);
                         setSelectedMenu(found ? { id: found.id, name: found.name, recipe: found.recipe } : { id: menu.id, name: menu.name });
                       }}
@@ -421,7 +406,7 @@ export default function RecommendationPage() {
               </button>
             </div>
             <div>
-              {selectedMenu.recipe ? (
+              {selectedMenu.recipe && Object.keys(selectedMenu.recipe).length > 0 ? (
                 <div className="space-y-2">
                   {Object.entries(selectedMenu.recipe).map(([ing, qty]) => (
                     <div key={ing} className="flex justify-between text-[14px]">
@@ -431,7 +416,7 @@ export default function RecommendationPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-[14px] text-ink-subtle">Resep tidak tersedia untuk item ini.</p>
+                <p className="text-[14px] text-ink-subtle">Resep tidak tersedia atau belum diunggah untuk item ini.</p>
               )}
             </div>
           </div>

@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { initializeBackendStore, loadWasteLog } from '@/lib/backend-store';
 import { formatRp, getModelTrainingStatus, isSalesUploadCompleted, todayString, type ModelTrainingStatus } from '@/lib/storage';
 import { requestModelPrediction } from '@/lib/model-service';
-import type { EventOptionValue, ModelPredictionResponse, WeatherOption } from '@/lib/model-prediction';
-import { MODEL_MENU } from '@/lib/model-prediction';
+import type { EventOptionValue, WeatherOption } from '@/lib/model-prediction';
 
 interface DashboardData {
   predictionDate: string;
@@ -21,16 +20,22 @@ interface DashboardData {
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>(getModelTrainingStatus());
-  const [isLocked, setIsLocked] = useState(!isSalesUploadCompleted());
+  
+  // PENYELARASAN STATE ASINKRON SINKRONISASI CLOUD FIREBASE
+  const [isMounted, setIsMounted] = useState(false);
+  const [modelStatus, setModelStatus] = useState<ModelTrainingStatus>('idle');
+  const [isLocked, setIsLocked] = useState(true);
 
   useEffect(() => {
-    const syncStatus = () => {
-      setModelStatus(getModelTrainingStatus());
-      setIsLocked(!isSalesUploadCompleted());
+    const syncStatus = async () => {
+      const currentStatus = await getModelTrainingStatus();
+      const uploadCompleted = await isSalesUploadCompleted();
+      setModelStatus(currentStatus);
+      setIsLocked(!uploadCompleted);
+      setIsMounted(true);
     };
 
-    syncStatus();
+    void syncStatus();
     window.addEventListener('ventore-model-status-changed', syncStatus);
 
     return () => {
@@ -40,13 +45,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function loadPrediction() {
-      if (!isSalesUploadCompleted()) {
-        setIsLocked(true);
-        return;
-      }
-
       try {
-        setIsLocked(false);
         await initializeBackendStore();
         const wasteLog = await loadWasteLog();
         const totalWasteLoss = wasteLog.reduce((sum, r) => sum + r.total_daily_loss, 0);
@@ -125,10 +124,19 @@ export default function Dashboard() {
       }
     }
 
-    if (!isLocked) {
+    if (isMounted && !isLocked) {
       void loadPrediction();
     }
-  }, [isLocked]);
+  }, [isLocked, isMounted]);
+
+  // Mengamankan kondisi awal render siklus hidrasi SSR Next.js
+  if (!isMounted) {
+    return (
+      <div className="flex items-center justify-center h-64 text-ink-subtle text-sm">
+        Memuat status dashboard cloud...
+      </div>
+    );
+  }
 
   if (isLocked) {
     return (

@@ -14,127 +14,94 @@ import {
 } from './storage';
 import type { IngredientPrices, SalesRecord, StockData, WasteRecord } from './types';
 
-type BackendSnapshot = {
-  salesHistory: SalesRecord[];
-  stockData: StockData;
-  ingredientPrices: IngredientPrices;
-  wasteLog: WasteRecord[];
-};
-
 const STATE_COLLECTION = 'appState';
 const STATE_DOC = 'main';
 
-function getDefaultSnapshot(): BackendSnapshot {
+// Fungsi helper untuk mengambil semua data sinkron (fallback)
+async function getFallbackSnapshot() {
   return {
-    salesHistory: getSalesHistory(),
-    stockData: getStockData(),
-    ingredientPrices: getIngredientPrices(),
-    wasteLog: getWasteLog(),
+    salesHistory: await getSalesHistory(),
+    stockData: await getStockData(),
+    ingredientPrices: await getIngredientPrices(),
+    wasteLog: await getWasteLog(),
   };
 }
 
-async function readSnapshot(): Promise<BackendSnapshot> {
-  if (!isFirebaseConfigured()) {
-    return getDefaultSnapshot();
-  }
+async function readSnapshot() {
+  if (!isFirebaseConfigured()) return getFallbackSnapshot();
 
   const db = getFirebaseDb();
-  if (!db) {
-    return getDefaultSnapshot();
-  }
+  if (!db) return getFallbackSnapshot();
 
   const ref = doc(db, STATE_COLLECTION, STATE_DOC);
   const snapshot = await getDoc(ref);
 
   if (!snapshot.exists()) {
-    const initial = getDefaultSnapshot();
+    const initial = await getFallbackSnapshot();
     await setDoc(ref, initial);
     return initial;
   }
 
-  const data = snapshot.data() as Partial<BackendSnapshot>;
-  return {
-    salesHistory: Array.isArray(data.salesHistory) ? (data.salesHistory as SalesRecord[]) : [],
-    stockData: data.stockData && typeof data.stockData === 'object' ? (data.stockData as StockData) : {},
-    ingredientPrices:
-      data.ingredientPrices && typeof data.ingredientPrices === 'object'
-        ? (data.ingredientPrices as IngredientPrices)
-        : {},
-    wasteLog: Array.isArray(data.wasteLog) ? (data.wasteLog as WasteRecord[]) : [],
-  };
+  return snapshot.data() as any;
 }
 
-async function writeSnapshot(next: BackendSnapshot): Promise<void> {
-  if (!isFirebaseConfigured()) {
-    return;
-  }
-
+async function writeSnapshot(next: any): Promise<void> {
+  if (!isFirebaseConfigured()) return;
   const db = getFirebaseDb();
-  if (!db) {
-    return;
-  }
-
+  if (!db) return;
   await setDoc(doc(db, STATE_COLLECTION, STATE_DOC), next);
 }
 
 export async function initializeBackendStore(): Promise<void> {
-  initializeIfNeeded();
-  if (!isFirebaseConfigured()) {
-    return;
-  }
-
-  await readSnapshot();
+  await initializeIfNeeded();
 }
 
 export async function loadSalesHistory(): Promise<SalesRecord[]> {
   const snapshot = await readSnapshot();
-  return snapshot.salesHistory;
+  return snapshot.salesHistory || [];
 }
 
 export async function persistSalesRecord(record: SalesRecord): Promise<void> {
   const snapshot = await readSnapshot();
-  const next = [...snapshot.salesHistory];
+  const next = [...(snapshot.salesHistory || [])];
   const index = next.findIndex((item) => item.date === record.date);
-  if (index >= 0) {
-    next[index] = record;
-  } else {
-    next.push(record);
-  }
+  if (index >= 0) next[index] = record;
+  else next.push(record);
 
   await writeSnapshot({ ...snapshot, salesHistory: next });
-  appendSalesRecord(record);
+  await appendSalesRecord(record);
 }
 
 export async function loadStockData(): Promise<StockData> {
   const snapshot = await readSnapshot();
-  return snapshot.stockData;
+  return snapshot.stockData || {};
 }
 
 export async function persistStockData(data: StockData): Promise<void> {
   const snapshot = await readSnapshot();
   await writeSnapshot({ ...snapshot, stockData: data });
-  saveStockData(data);
+  await saveStockData(data);
 }
 
 export async function loadIngredientPricesBackend(): Promise<IngredientPrices> {
   const snapshot = await readSnapshot();
-  return snapshot.ingredientPrices;
+  return snapshot.ingredientPrices || {};
 }
 
 export async function persistIngredientPrices(prices: IngredientPrices): Promise<void> {
   const snapshot = await readSnapshot();
   await writeSnapshot({ ...snapshot, ingredientPrices: prices });
-  saveIngredientPrices(prices);
+  await saveIngredientPrices(prices);
 }
 
 export async function loadWasteLog(): Promise<WasteRecord[]> {
   const snapshot = await readSnapshot();
-  return snapshot.wasteLog;
+  return snapshot.wasteLog || [];
 }
 
 export async function persistWasteRecord(record: WasteRecord): Promise<void> {
   const snapshot = await readSnapshot();
-  const next = [...snapshot.wasteLog];
+  const next = [...(snapshot.wasteLog || [])];
   const index = next.findIndex((item) => item.date === record.date);
   if (index >= 0) {
     next[index] = {
@@ -147,10 +114,11 @@ export async function persistWasteRecord(record: WasteRecord): Promise<void> {
   }
 
   await writeSnapshot({ ...snapshot, wasteLog: next });
-  appendWasteRecord(record);
+  await appendWasteRecord(record);
 }
 
 export async function clearWasteLogBackend(): Promise<void> {
-  await writeSnapshot({ ...(await readSnapshot()), wasteLog: [] });
-  clearWasteLog();
+  const snapshot = await readSnapshot();
+  await writeSnapshot({ ...snapshot, wasteLog: [] });
+  await clearWasteLog();
 }
