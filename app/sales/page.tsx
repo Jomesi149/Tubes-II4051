@@ -4,10 +4,11 @@
 import { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import { read, utils } from 'xlsx';
-import { initializeBackendStore, loadSalesHistory, persistSalesRecord } from '@/lib/backend-store';
 import {
   todayString,
   DAY_NAMES_EXPORTED,
+  appendSalesRecord,
+  getSalesHistory,
   getModelTrainingStatus,
   markModelTrainingError,
   markModelTrainingInProgress,
@@ -92,9 +93,6 @@ export default function SalesPage() {
 
   useEffect(() => {
     const load = async () => {
-      await initializeBackendStore();
-      setHistory(await loadSalesHistory());
-      
       const currentStatus = await getModelTrainingStatus();
       setModelStatus(currentStatus);
       setIsMounted(true);
@@ -102,8 +100,10 @@ export default function SalesPage() {
       if (currentStatus === 'ready') {
         const loadedMenus = await getMenuList();
         if (loadedMenus.length > 0) applyMenus(loadedMenus);
+        setHistory(await getSalesHistory());
       } else {
         setMenus([]);
+        setHistory([]);
       }
       void fetchWeatherForDate(date);
     };
@@ -114,6 +114,9 @@ export default function SalesPage() {
       if (nextStatus === 'ready') {
         const loadedMenus = await getMenuList();
         if (loadedMenus.length > 0) applyMenus(loadedMenus);
+        setHistory(await getSalesHistory());
+      } else {
+        setHistory([]);
       }
     };
 
@@ -232,13 +235,15 @@ export default function SalesPage() {
     const parsedSales: Record<string, number> = {};
     menus.forEach((menu) => { parsedSales[menu.id] = parseInt(sales[menu.id] || '0', 10) || 0; });
 
-    const record: SalesRecord = { date, day_of_week: dayOfWeek, condition: 'Cerah', sales: parsedSales };
-    void persistSalesRecord(record).then(async () => { setHistory(await loadSalesHistory()); });
+    const record: SalesRecord = { date, day_of_week: dayOfWeek, condition: weather, sales: parsedSales };
+    void appendSalesRecord(record).then(async () => { setHistory(await getSalesHistory()); });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
   const recentHistory = [...history].reverse().slice(0, 10);
+  const menuNameById = new Map(menus.map((menu) => [menu.id, menu.name]));
+  const canShowHistory = modelStatus === 'ready' && menus.length > 0 && recentHistory.length > 0;
 
   return (
     <div className="p-6 lg:p-8 max-w-[1280px] mx-auto">
@@ -303,6 +308,44 @@ export default function SalesPage() {
             </div>
             <button type="submit" disabled={menus.length === 0} className="w-full py-2 rounded-md bg-primary text-white disabled:opacity-60">{saved ? '✓ Tersimpan' : 'Simpan Penjualan'}</button>
           </form>
+        </div>
+
+        <div className="bg-surface-1 border border-hairline rounded-xl p-6 lg:sticky lg:top-8 lg:self-start">
+          <h2 className="text-[22px] font-medium text-ink tracking-[-0.4px] mb-6">Histori Terbaru</h2>
+
+          {!canShowHistory ? (
+            <div className="rounded-lg border border-dashed border-hairline bg-canvas px-4 py-10 text-center">
+              <p className="text-sm font-medium text-ink">Histori penjualan masih kosong.</p>
+              <p className="mt-2 text-sm text-ink-subtle">
+                {modelStatus === 'ready' && menus.length > 0
+                  ? 'Silakan isi form penjualan lalu tekan Simpan Penjualan.'
+                  : 'Silakan unggah CSV data penjualan terlebih dahulu untuk mengaktifkan menu.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {recentHistory.map((record) => (
+                <div key={record.date} className="border-b border-hairline pb-5 last:border-b-0 last:pb-0">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-ink">{record.date}</p>
+                      <p className="mt-0.5 text-xs text-ink-tertiary">{record.day_of_week}</p>
+                    </div>
+                    <span className="rounded-full border border-hairline px-2.5 py-1 text-xs font-medium text-ink-subtle">{record.condition}</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {Object.entries(record.sales).map(([menuId, quantity]) => (
+                      <div key={menuId} className="flex items-center justify-between gap-3 rounded-md bg-canvas px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate text-ink-subtle">{menuNameById.get(menuId) ?? menuId.replace(/_/g, ' ')}</span>
+                        <span className="shrink-0 font-mono font-semibold text-ink">{quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
