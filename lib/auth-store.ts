@@ -1,65 +1,65 @@
-import { promises as fs } from 'fs';
-import os from 'os';
-import path from 'path';
 import { collection, doc, getDocs, query, setDoc, where } from 'firebase/firestore';
 import { getFirebaseDb, isFirebaseConfigured } from './firebase';
 import { createUserId, type StoredUser } from './auth';
 
 const USERS_COLLECTION = 'users';
-const USERS_FILE_PATH = path.join(os.tmpdir(), 'ventore-users.json');
 
-async function ensureUsersFile(): Promise<void> {
-  await fs.mkdir(path.dirname(USERS_FILE_PATH), { recursive: true });
-
-  try {
-    await fs.access(USERS_FILE_PATH);
-  } catch {
-    await fs.writeFile(USERS_FILE_PATH, '[]', 'utf8');
-  }
-}
-
-async function readUsersFile(): Promise<StoredUser[]> {
-  await ensureUsersFile();
-  const raw = await fs.readFile(USERS_FILE_PATH, 'utf8');
-  return JSON.parse(raw) as StoredUser[];
-}
-
-async function writeUsersFile(users: StoredUser[]): Promise<void> {
-  await ensureUsersFile();
-  await fs.writeFile(USERS_FILE_PATH, JSON.stringify(users, null, 2), 'utf8');
-}
-
+/**
+ * Mencari data user langsung dari Cloud Firestore berdasarkan username secara asinkron
+ */
 export async function findUserByUsername(username: string): Promise<StoredUser | null> {
+  console.log("findUserByUsername Cloud Firestore Start");
+
   const normalized = username.trim().toLowerCase();
 
   if (isFirebaseConfigured()) {
     try {
       const db = getFirebaseDb();
       if (db) {
-        const q = query(collection(db, USERS_COLLECTION), where('username', '==', normalized));
+        // Melakukan query langsung ke Cloud Firestore koleksi 'users'
+        const q = query(
+          collection(db, USERS_COLLECTION),
+          where("username", "==", normalized)
+        );
+
         const snapshot = await getDocs(q);
 
         if (!snapshot.empty) {
+          console.log("User ditemukan di Cloud Firestore");
           return snapshot.docs[0].data() as StoredUser;
         }
       }
-    } catch {
-      // Fall back to local JSON storage when Firestore is unavailable.
+    } catch (e) {
+      console.error("Gagal melakukan query findUserByUsername ke Firestore:", e);
+      throw new Error("Terjadi masalah koneksi database cloud saat memeriksa username.");
     }
+  } else {
+    console.error("Firebase tidak terkonfigurasi! Pastikan ENV sudah dimasukkan ke Vercel.");
+    throw new Error("Database Cloud belum terkonfigurasi dengan benar.");
   }
 
-  const users = await readUsersFile();
-  return users.find((user) => user.username.toLowerCase() === normalized) ?? null;
+  return null;
 }
 
-export async function createUserRecord(username: string, password_hash: string, password_salt: string): Promise<StoredUser> {
+/**
+ * Membuat data user baru dan langsung menyimpannya ke Cloud Firestore secara terpusat
+ */
+export async function createUserRecord(
+  username: string, 
+  password_hash: string, 
+  password_salt: string
+): Promise<StoredUser> {
+  console.log("createUserRecord Cloud Firestore Start");
+  
   const normalizedUsername = username.trim().toLowerCase();
+  
+  // Memastikan keunikan username langsung via query Cloud Firestore
   const existingUser = await findUserByUsername(normalizedUsername);
-
   if (existingUser) {
-    throw new Error('Username already exists');
+    throw new Error('Username sudah terdaftar');
   }
 
+  // Membuat struktur data user terstandarisasi dengan ID unik terkomputerisasi
   const user: StoredUser = {
     user_id: createUserId(),
     username: normalizedUsername,
@@ -72,16 +72,17 @@ export async function createUserRecord(username: string, password_hash: string, 
     try {
       const db = getFirebaseDb();
       if (db) {
-        await setDoc(doc(db, USERS_COLLECTION, user.user_id), user);
+        // Menyimpan data akun baru dengan kunci dokumen berbasis user_id
+        const userDocRef = doc(db, USERS_COLLECTION, user.user_id);
+        await setDoc(userDocRef, user);
+        console.log("User baru berhasil didaftarkan di Cloud Firestore:", user.user_id);
         return user;
       }
-    } catch {
-      // Fall back to local JSON storage when Firestore is unavailable.
+    } catch (e) {
+      console.error("Gagal menulis dokumen user baru ke Firestore:", e);
+      throw new Error("Gagal mengamankan data akun baru ke Cloud database.");
     }
   }
 
-  const users = await readUsersFile();
-  users.push(user);
-  await writeUsersFile(users);
-  return user;
+  throw new Error('Gagal memproses registrasi karena koneksi Cloud database terputus.');
 }

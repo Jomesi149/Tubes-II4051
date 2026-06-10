@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const { password_hash, password_salt } = hashPassword(password);
     const user = await createUserRecord(username, password_hash, password_salt);
 
-    // SINKRONISASI OTOMATIS KE FIREBASE CLOUD
+    // KUNCI: Tambahkan AWAIT agar API menunggu Firebase selesai menulis data
     try {
       if (db) {
         await setDoc(doc(db, 'users', user.user_id), {
@@ -51,8 +51,9 @@ export async function POST(request: Request) {
         });
       }
     } catch (firebaseErr) {
-      console.error("Gagal sinkronisasi user ke Firebase:", firebaseErr);
-      // Registrasi tetap dianggap sukses walau sinkron cloud gagal
+      console.error("Firebase sync error:", firebaseErr);
+      // Kita tetap kembalikan sukses agar user bisa masuk, 
+      // tapi beri log agar kita tahu ini gagal.
     }
 
     return NextResponse.json({ user: sanitizeUser(user) }, { status: 201 });

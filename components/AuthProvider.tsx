@@ -34,9 +34,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // components/AuthProvider.tsx
+// ... di dalam useEffect inisialisasi ...
+
   useEffect(() => {
-    setUser(readStoredUser());
-    setLoading(false);
+    const init = async () => {
+      const stored = readStoredUser();
+      if (stored) {
+        setUser(stored);
+        // FORCE FETCH: Ambil data terbaru dari cloud agar device sinkron
+        // Kamu bisa memanggil fungsi fetch data (misal getSalesHistory) di sini
+      }
+      setLoading(false);
+    };
+    void init();
   }, []);
 
   const persistUser = (nextUser: AuthUser | null) => {
