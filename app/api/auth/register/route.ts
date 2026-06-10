@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createUserRecord, findUserByUsername } from '@/lib/auth-store';
 import { hashPassword, sanitizeUser } from '@/lib/auth';
-// Tambahan untuk Firebase
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+
+// KUNCI UTAMA: Matikan agresivitas cache Next.js agar internal fetch Firebase tidak deadlock
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 export async function POST(request: Request) {
   try {
@@ -37,28 +38,9 @@ export async function POST(request: Request) {
     const { password_hash, password_salt } = hashPassword(password);
     const user = await createUserRecord(username, password_hash, password_salt);
 
-    // KUNCI: Tambahkan AWAIT agar API menunggu Firebase selesai menulis data
-    try {
-      if (db) {
-        await setDoc(doc(db, 'users', user.user_id), {
-          username: user.username,
-          createdAt: new Date().toISOString(),
-          modelTrainingStatus: 'idle',
-          menuList: [],
-          salesHistory: [],
-          stockData: {},
-          wasteLog: []
-        });
-      }
-    } catch (firebaseErr) {
-      console.error("Firebase sync error:", firebaseErr);
-      // Kita tetap kembalikan sukses agar user bisa masuk, 
-      // tapi beri log agar kita tahu ini gagal.
-    }
-
     return NextResponse.json({ user: sanitizeUser(user) }, { status: 201 });
   } catch (error) {
-    console.error(error);
+    console.error("DEBUG REGISTER ERROR:", error);
     return NextResponse.json({ message: error instanceof Error ? error.message : 'Registrasi gagal' }, { status: 500 });
   }
 }

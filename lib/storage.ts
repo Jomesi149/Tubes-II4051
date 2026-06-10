@@ -216,12 +216,19 @@ export async function getMenuList(): Promise<MenuItem[]> {
 
 export async function saveMenuList(menus: MenuItem[]): Promise<void> {
   await writeCloudField('menuList', KEYS.menu, menus);
+}
+
+export async function saveRecipeMenuList(menus: MenuItem[]): Promise<void> {
+  await writeCloudField('menuList', KEYS.menu, menus);
   await writeCloudField('recipeImportedMarker', RECIPE_IMPORT_MARKER, '1');
 }
 
 export async function hasPersonalRecipeData(): Promise<boolean> {
   const marker = await readCloudField<string>('recipeImportedMarker', RECIPE_IMPORT_MARKER, '0');
-  return marker === '1';
+  if (marker !== '1') return false;
+
+  const menus = await getMenuList();
+  return menus.some((menu) => menu.recipe && Object.keys(menu.recipe).length > 0);
 }
 
 export async function getSalesHistory(): Promise<SalesRecord[]> {

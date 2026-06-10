@@ -16,7 +16,6 @@ export async function findUserByUsername(username: string): Promise<StoredUser |
     try {
       const db = getFirebaseDb();
       if (db) {
-        // Melakukan query langsung ke Cloud Firestore koleksi 'users'
         const q = query(
           collection(db, USERS_COLLECTION),
           where("username", "==", normalized)
@@ -72,9 +71,18 @@ export async function createUserRecord(
     try {
       const db = getFirebaseDb();
       if (db) {
-        // Menyimpan data akun baru dengan kunci dokumen berbasis user_id
         const userDocRef = doc(db, USERS_COLLECTION, user.user_id);
-        await setDoc(userDocRef, user);
+        
+        // Gabungkan penulisan akun dan inisialisasi state aplikasi dalam 1 kali eksekusi
+        await setDoc(userDocRef, {
+          ...user,
+          modelTrainingStatus: 'idle',
+          menuList: [],
+          salesHistory: [],
+          stockData: {},
+          wasteLog: []
+        });
+        
         console.log("User baru berhasil didaftarkan di Cloud Firestore:", user.user_id);
         return user;
       }

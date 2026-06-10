@@ -6,7 +6,7 @@ import { read, utils } from 'xlsx';
 import Link from 'next/link';
 import {
   getMenuList,
-  saveMenuList,
+  saveRecipeMenuList,
   getStockData,
   hasPersonalRecipeData,
 } from '@/lib/storage';
@@ -67,7 +67,7 @@ export default function StockPage() {
           recipe: recipeMap.get(menu.id) || {},
         }));
 
-        await saveMenuList(updatedMenus);
+        await saveRecipeMenuList(updatedMenus);
         await loadStockRecords();
         setUploadMessage('Struktur resep personal (BOM) berhasil disimpan di cloud.');
       };
@@ -123,7 +123,7 @@ export default function StockPage() {
             ) : recipeLocked ? (
               <div className="rounded-md border border-hairline bg-surface-2 px-4 py-3 text-sm text-ink-subtle">Struktur resep (BOM) toko Anda telah berhasil dikunci di Firebase Cloud.</div>
             ) : (
-              <input id="recipe-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleRecipeUpload} className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2" />
+              <input id="recipe-upload" type="file" accept=".csv,.xlsx,.xls" onChange={handleRecipeUpload} className="block w-full text-sm text-ink-subtle file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white" />
             )}
             {uploadMessage && <p className="mt-2 text-sm text-primary font-medium">{uploadMessage}</p>}
             {uploadError && <p className="mt-2 text-sm text-red-600 font-medium">{uploadError}</p>}

@@ -18,12 +18,12 @@ export function isFirebaseConfigured(): boolean {
   return hasRequiredConfig();
 }
 
-// Inisialisasi Firebase App secara aman (Singleton Pattern untuk Next.js)
+// Inisialisasi Firebase App (Aman dari HMR Fast Refresh Next.js)
 const app = getApps().length > 0 
   ? getApps()[0] 
   : (hasRequiredConfig() ? initializeApp(firebaseConfig) : null);
 
-// Ekspor Firestore instance secara langsung agar mudah di-import di file storage
+// Gunakan getFirestore standar, Next.js (dengan force-dynamic) akan mengizinkannya bernapas
 export const db = app ? getFirestore(app) : null;
 
 export function getFirebaseDb() {
